@@ -1,0 +1,33 @@
+# Optional: local testing only (Unraid does NOT use this file).
+# Spins up a throwaway MariaDB next to the app so you can try it on your machine.
+#   docker compose -f docker-compose.dev.yml up --build
+# Then open http://localhost:8080
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpw
+      MARIADB_DATABASE: transition_tracker
+      MARIADB_USER: tracker
+      MARIADB_PASSWORD: trackerpw
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: tracker
+      DB_PASSWORD: trackerpw
+      DB_NAME: transition_tracker
+    depends_on:
+      db:
+        condition: service_healthy
