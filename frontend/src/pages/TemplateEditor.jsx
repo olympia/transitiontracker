@@ -7,8 +7,10 @@ import {
   ListChecks,
   GripVertical,
 } from "lucide-react";
+import { Upload } from "lucide-react";
 import { api } from "../api";
 import { EmptyState, Spinner } from "../components/ui.jsx";
+import ImportModal from "../components/ImportModal.jsx";
 
 function offsetLabel(days, noDeadline) {
   if (noDeadline) return "No deadline";
@@ -19,6 +21,7 @@ function offsetLabel(days, noDeadline) {
 
 export default function TemplateEditor({ project }) {
   const [defs, setDefs] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   async function load() {
     setDefs(await api.listTaskDefs(project.id));
@@ -61,9 +64,14 @@ export default function TemplateEditor({ project }) {
             date using the offset below.
           </p>
         </div>
-        <button className="btn-primary" onClick={addRow}>
-          <Plus size={16} /> Add task
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-subtle" onClick={() => setImportOpen(true)}>
+            <Upload size={16} /> Import
+          </button>
+          <button className="btn-primary" onClick={addRow}>
+            <Plus size={16} /> Add task
+          </button>
+        </div>
       </div>
 
       {defs.length === 0 ? (
@@ -108,6 +116,13 @@ export default function TemplateEditor({ project }) {
         and <code>-3</code> is 3 days after. Toggle <strong>No deadline</strong> for tasks
         that should never be flagged as overdue.
       </div>
+
+      <ImportModal
+        open={importOpen}
+        project={project}
+        onClose={() => setImportOpen(false)}
+        onDone={load}
+      />
     </div>
   );
 }

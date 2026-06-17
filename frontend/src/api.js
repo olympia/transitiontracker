@@ -53,4 +53,23 @@ export const api = {
 
   // matrix
   matrix: (pid) => req("GET", `/projects/${pid}/matrix`),
+
+  // import
+  importTemplateUrl: () => BASE + "/import-template",
+  importExcel: async (pid, file, mode) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`${BASE}/projects/${pid}/import?mode=${mode}`, {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try {
+        detail = (await res.json()).detail || detail;
+      } catch (_) {}
+      throw new Error(detail);
+    }
+    return res.json();
+  },
 };

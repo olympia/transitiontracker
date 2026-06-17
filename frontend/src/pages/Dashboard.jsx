@@ -5,9 +5,11 @@ import {
   LayoutGrid,
   RefreshCw,
   CalendarClock,
+  Upload,
 } from "lucide-react";
 import { api } from "../api";
 import { Badge, EmptyState, Spinner, Modal, Field } from "../components/ui.jsx";
+import ImportModal from "../components/ImportModal.jsx";
 import { STATUS_META, OVERALL_META, fmtDate } from "../lib/status.js";
 import EntityDrawer from "./EntityDrawer.jsx";
 
@@ -20,6 +22,12 @@ const FILTERS = [
   { id: "none", label: "No go-live" },
 ];
 
+// Fixed widths so the sticky left columns and their offsets line up exactly.
+const W_RACK = 200;
+const W_GOLIVE = 120;
+const W_STATUS = 150;
+const TASK_W = 44;
+
 export default function Dashboard({ project }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -27,6 +35,7 @@ export default function Dashboard({ project }) {
   const [filter, setFilter] = useState("all");
   const [openEntity, setOpenEntity] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -115,6 +124,9 @@ export default function Dashboard({ project }) {
           <button className="btn-ghost px-2.5" onClick={load} title="Refresh">
             <RefreshCw size={16} />
           </button>
+          <button className="btn-subtle" onClick={() => setImportOpen(true)}>
+            <Upload size={16} /> Import
+          </button>
           <button className="btn-primary" onClick={() => setAddOpen(true)}>
             <Plus size={16} /> Add {project.entity_label.toLowerCase()}
           </button>
@@ -134,13 +146,18 @@ export default function Dashboard({ project }) {
             data?.rows.length
               ? "Try clearing the search or status filter."
               : defs.length === 0
-              ? "Define your repeating tasks in the Task template tab first, then add entities here."
-              : `Add your first ${project.entity_label.toLowerCase()} to start tracking.`
+              ? "Define your repeating tasks in the Task template tab first, then add or import entities here."
+              : `Add or import your first ${project.entity_label.toLowerCase()} to start tracking.`
           }
           action={
-            <button className="btn-primary" onClick={() => setAddOpen(true)}>
-              <Plus size={16} /> Add {project.entity_label.toLowerCase()}
-            </button>
+            <div className="flex gap-2">
+              <button className="btn-subtle" onClick={() => setImportOpen(true)}>
+                <Upload size={16} /> Import from Excel
+              </button>
+              <button className="btn-primary" onClick={() => setAddOpen(true)}>
+                <Plus size={16} /> Add {project.entity_label.toLowerCase()}
+              </button>
+            </div>
           }
         />
       ) : (
@@ -172,28 +189,48 @@ export default function Dashboard({ project }) {
           setOpenEntity(e.id);
         }}
       />
+
+      <ImportModal
+        open={importOpen}
+        project={project}
+        onClose={() => setImportOpen(false)}
+        onDone={load}
+      />
     </div>
   );
 }
 
 function Matrix({ defs, rows, entityLabel, onOpen }) {
+  const headBase =
+    "sticky z-20 bg-slate-50/95 px-3 py-3 text-left align-bottom backdrop-blur dark:bg-slate-900/95";
+  const stickyHead = (left, width, extra = "") => ({
+    className: `${headBase} ${extra}`,
+    style: { left, width, minWidth: width, maxWidth: width },
+  });
+  const bodyBase =
+    "sticky z-10 box-border border-t border-slate-100 bg-white px-3 py-2.5 group-hover:bg-brand-50/60 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800/60";
+  const stickyBody = (left, width, extra = "") => ({
+    className: `${bodyBase} ${extra}`,
+    style: { left, width, minWidth: width, maxWidth: width },
+  });
+
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="border-separate border-spacing-0">
+        <table className="w-full border-separate border-spacing-0" style={{ tableLayout: "fixed" }}>
           <thead>
             <tr>
-              <th className="sticky left-0 z-20 bg-slate-50/95 px-4 py-3 text-left backdrop-blur dark:bg-slate-900/95">
+              <th {...stickyHead(0, W_RACK, "px-4")}>
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
                   {entityLabel}
                 </span>
               </th>
-              <th className="sticky left-[180px] z-20 hidden bg-slate-50/95 px-3 py-3 text-left backdrop-blur dark:bg-slate-900/95 md:table-cell">
+              <th {...stickyHead(W_RACK, W_GOLIVE, "hidden md:table-cell")}>
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
                   Go-live
                 </span>
               </th>
-              <th className="sticky left-[300px] z-20 hidden bg-slate-50/95 px-3 py-3 text-left backdrop-blur dark:bg-slate-900/95 md:table-cell">
+              <th {...stickyHead(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell")}>
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
                   Status
                 </span>
@@ -201,14 +238,19 @@ function Matrix({ defs, rows, entityLabel, onOpen }) {
               {defs.map((d) => (
                 <th
                   key={d.id}
-                  className="h-36 bg-slate-50/95 align-bottom backdrop-blur dark:bg-slate-900/95"
+                  className="h-40 bg-slate-50/95 align-bottom backdrop-blur dark:bg-slate-900/95"
+                  style={{ width: TASK_W, minWidth: TASK_W, maxWidth: TASK_W }}
                 >
-                  <div className="mx-auto flex h-32 w-9 items-end justify-center">
+                  <div className="flex h-36 items-end justify-center pb-2">
                     <span
-                      className="block max-w-[8.5rem] truncate text-xs font-semibold text-slate-600 dark:text-slate-300"
+                      className="text-xs font-semibold text-slate-600 dark:text-slate-300"
                       style={{
                         writingMode: "vertical-rl",
                         transform: "rotate(180deg)",
+                        maxHeight: "8.5rem",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
                       }}
                       title={`${d.name}${d.responsible ? " — " + d.responsible : ""}`}
                     >
@@ -228,22 +270,18 @@ function Matrix({ defs, rows, entityLabel, onOpen }) {
                   className="group cursor-pointer"
                   onClick={() => onOpen(r.entity_id)}
                 >
-                  <td className="sticky left-0 z-10 border-t border-slate-100 bg-white px-4 py-2.5 group-hover:bg-brand-50/60 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800/60">
-                    <div className="w-[148px]">
-                      <div className="truncate text-sm font-semibold">
-                        {r.code || "—"}
-                      </div>
-                      <div className="truncate text-xs text-slate-400">
-                        {r.name || r.location}
-                      </div>
+                  <td {...stickyBody(0, W_RACK, "px-4")}>
+                    <div className="truncate text-sm font-semibold">{r.code || "—"}</div>
+                    <div className="truncate text-xs text-slate-400">
+                      {r.name || r.location}
                     </div>
                   </td>
-                  <td className="sticky left-[180px] z-10 hidden border-t border-slate-100 bg-white px-3 py-2.5 group-hover:bg-brand-50/60 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800/60 md:table-cell">
+                  <td {...stickyBody(W_RACK, W_GOLIVE, "hidden md:table-cell")}>
                     <span className="whitespace-nowrap text-xs text-slate-500">
                       {r.golive_date ? fmtDate(r.golive_date) : "—"}
                     </span>
                   </td>
-                  <td className="sticky left-[300px] z-10 hidden border-t border-slate-100 bg-white px-3 py-2.5 group-hover:bg-brand-50/60 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800/60 md:table-cell">
+                  <td {...stickyBody(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell")}>
                     <Badge meta={om} />
                   </td>
                   {r.cells.map((c) => {
@@ -256,7 +294,8 @@ function Matrix({ defs, rows, entityLabel, onOpen }) {
                     return (
                       <td
                         key={c.task_def_id}
-                        className="border-t border-slate-100 px-1 py-1.5 text-center dark:border-slate-800"
+                        className="border-t border-slate-100 py-1.5 text-center dark:border-slate-800"
+                        style={{ width: TASK_W, minWidth: TASK_W, maxWidth: TASK_W }}
                       >
                         <div
                           title={tip}
@@ -281,7 +320,9 @@ function Legend() {
     <div className="flex flex-wrap items-center gap-4 px-1 text-xs text-slate-500">
       {items.map((k) => (
         <div key={k} className="flex items-center gap-1.5">
-          <span className={`h-3.5 w-3.5 rounded ${STATUS_META[k].cell} ring-1 ring-inset ring-black/10 dark:ring-white/10`} />
+          <span
+            className={`h-3.5 w-3.5 rounded ${STATUS_META[k].cell} ring-1 ring-inset ring-black/10 dark:ring-white/10`}
+          />
           {STATUS_META[k].label}
         </div>
       ))}

@@ -1,9 +1,9 @@
 """REST API routes."""
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app import models, schemas, status as status_logic
+from app import imports, models, schemas, status as status_logic
 from app.database import get_db
 
 router = APIRouter(prefix="/api")
@@ -445,3 +445,44 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
         task_definitions=[schemas.TaskDefinitionOut.model_validate(d) for d in defs],
         rows=rows,
     )
+
+
+# ---------------------------------------------------------------- import / template
+XLSX_MEDIA = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+
+@router.get("/import-template")
+def download_import_template():
+    data = imports.build_template()
+    return Response(
+        content=data,
+        media_type=XLSX_MEDIA,
+        headers={
+            "Content-Disposition": 'attachment; filename="transition-tracker-import-template.xlsx"'
+        },
+    )
+
+
+@router.post("/projects/{project_id}/import")
+async def import_excel(
+    project_id: int,
+    mode: str = Query("append", pattern="^(append|replace)$"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    _get_project(db, project_id)
+    raw = await file.read()
+    try:
+        parsed = imports.parse_workbook(raw)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, f"Could not read the Excel file: {exc}")
+    if not parsed["tasks"] and not parsed["entities"]:
+        raise HTTPException(
+            400,
+            "No rows found. Make sure the file has 'Tasks' and/or 'Entities' "
+            "sheets with the template headers.",
+        )
+    counts = imports.apply_import(db, project_id, parsed, mode)
+    return counts
