@@ -35,6 +35,7 @@ class TaskDefinitionBase(BaseModel):
     responsible: str = ""
     offset_days: int = 0
     no_deadline: bool = False
+    is_golive: bool = False
     position: int = 0
 
 
@@ -47,6 +48,7 @@ class TaskDefinitionUpdate(BaseModel):
     responsible: str | None = None
     offset_days: int | None = None
     no_deadline: bool | None = None
+    is_golive: bool | None = None
     position: int | None = None
 
 
@@ -164,6 +166,7 @@ class MatrixRow(BaseModel):
     location: str
     golive_date: date | None
     next_step: str
+    has_notes: bool
     on_hold: bool
     overall: str
     overdue_count: int

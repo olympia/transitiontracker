@@ -9,6 +9,9 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  ChevronDown,
+  Filter,
+  StickyNote,
 } from "lucide-react";
 import { api } from "../api";
 import { Badge, EmptyState, Spinner, Modal, Field } from "../components/ui.jsx";
@@ -26,22 +29,45 @@ const FILTERS = [
   { id: "none", label: "No go-live" },
 ];
 
+const TASK_FILTER_OPTIONS = [
+  { v: "", l: "Any status" },
+  { v: "done", l: "Completed" },
+  { v: "overdue", l: "Overdue" },
+  { v: "duesoon", l: "Due soon" },
+  { v: "future", l: "Scheduled" },
+  { v: "none", l: "Not set" },
+];
+const GOLIVE_FILTER_OPTIONS = [
+  { v: "all", l: "All" },
+  { v: "has", l: "Has date" },
+  { v: "none", l: "No date" },
+];
+
 const W_RACK = 184;
 const W_GOLIVE = 104;
 const W_STATUS = 132;
 const MIN_CELL = 12;
 const MAX_CELL = 44;
 
+function lsBool(key, def) {
+  const v = localStorage.getItem(key);
+  return v === null ? def : v === "1";
+}
+
 export default function Dashboard({ project }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
-  const [openEntity, setOpenEntity] = useState(null);
+  const [goliveFilter, setGoliveFilter] = useState("all");
+  const [taskFilters, setTaskFilters] = useState({});
+  const [open, setOpen] = useState(null); // { id, taskDefId }
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
-  // zoom: userZoom (px) overrides the auto-fit size; null = auto-fit
+  const [entityStatsOpen, setEntityStatsOpen] = useState(() => lsBool("tt-stats-entity", true));
+  const [taskStatsOpen, setTaskStatsOpen] = useState(() => lsBool("tt-stats-task", true));
+
   const [userZoom, setUserZoom] = useState(() => {
     const v = Number(localStorage.getItem("tt-zoom"));
     return v > 0 ? v : null;
@@ -57,7 +83,6 @@ export default function Dashboard({ project }) {
       setLoading(false);
     }
   }
-
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,8 +98,7 @@ export default function Dashboard({ project }) {
       const isMd = window.matchMedia("(min-width: 768px)").matches;
       const sticky = isMd ? W_RACK + W_GOLIVE + W_STATUS : W_RACK;
       const avail = el.clientWidth - sticky - 6;
-      const fit = Math.floor(avail / nTasks);
-      setAutoFit(Math.max(MIN_CELL, Math.min(MAX_CELL, fit)));
+      setAutoFit(Math.max(MIN_CELL, Math.min(MAX_CELL, Math.floor(avail / nTasks))));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -83,7 +107,6 @@ export default function Dashboard({ project }) {
   }, [nTasks, data]);
 
   const cellPx = userZoom ?? autoFit;
-
   function setZoom(next) {
     const v = Math.max(MIN_CELL, Math.min(MAX_CELL, next));
     setUserZoom(v);
@@ -92,6 +115,26 @@ export default function Dashboard({ project }) {
   function fitZoom() {
     setUserZoom(null);
     localStorage.removeItem("tt-zoom");
+  }
+  function toggleEntityStats() {
+    setEntityStatsOpen((v) => {
+      localStorage.setItem("tt-stats-entity", v ? "0" : "1");
+      return !v;
+    });
+  }
+  function toggleTaskStats() {
+    setTaskStatsOpen((v) => {
+      localStorage.setItem("tt-stats-task", v ? "0" : "1");
+      return !v;
+    });
+  }
+  function setTaskFilter(id, val) {
+    setTaskFilters((cur) => {
+      const next = { ...cur };
+      if (!val) delete next[id];
+      else next[id] = val;
+      return next;
+    });
   }
 
   const stats = useMemo(() => {
@@ -103,11 +146,29 @@ export default function Dashboard({ project }) {
     return s;
   }, [data]);
 
+  const taskStats = useMemo(() => {
+    const s = { total: 0, done: 0, overdue: 0, duesoon: 0, future: 0, none: 0 };
+    data?.rows.forEach((r) =>
+      r.cells.forEach((c) => {
+        s.total++;
+        s[c.status] = (s[c.status] || 0) + 1;
+      })
+    );
+    return s;
+  }, [data]);
+
   const rows = useMemo(() => {
     if (!data) return [];
     const needle = q.trim().toLowerCase();
+    const tf = Object.entries(taskFilters);
     return data.rows.filter((r) => {
       if (filter !== "all" && r.overall !== filter) return false;
+      if (goliveFilter === "has" && !r.golive_date) return false;
+      if (goliveFilter === "none" && r.golive_date) return false;
+      for (const [tid, st] of tf) {
+        const cell = r.cells.find((c) => String(c.task_def_id) === tid);
+        if (!cell || cell.status !== st) return false;
+      }
       if (!needle) return true;
       return (
         r.code.toLowerCase().includes(needle) ||
@@ -115,22 +176,36 @@ export default function Dashboard({ project }) {
         r.location.toLowerCase().includes(needle)
       );
     });
-  }, [data, q, filter]);
+  }, [data, q, filter, goliveFilter, taskFilters]);
 
   if (loading && !data) return <Spinner />;
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard label={project.entity_label + "s"} value={stats.total} tone="brand" />
-        <StatCard label="Completed" value={stats.completed} tone="green" />
-        <StatCard label="On track" value={stats.ontrack} tone="slate" />
-        <StatCard label="Due soon" value={stats.duesoon} tone="amber" />
-        <StatCard label="Delayed" value={stats.delayed} tone="red" />
-        <StatCard label="On hold" value={stats.onhold} tone="blue" />
-      </div>
+    <div className="space-y-4">
+      {/* entity-level stats */}
+      <StatSection title="Entities" open={entityStatsOpen} onToggle={toggleEntityStats}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label={project.entity_label + "s"} value={stats.total} tone="brand" />
+          <StatCard label="Completed" value={stats.completed} tone="green" />
+          <StatCard label="On track" value={stats.ontrack} tone="slate" />
+          <StatCard label="Due soon" value={stats.duesoon} tone="amber" />
+          <StatCard label="Delayed" value={stats.delayed} tone="red" />
+          <StatCard label="On hold" value={stats.onhold} tone="blue" />
+        </div>
+      </StatSection>
 
-      <div className="flex flex-wrap items-center gap-2">
+      {/* task-level stats */}
+      <StatSection title="Tasks" open={taskStatsOpen} onToggle={toggleTaskStats}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard label="Tasks done" value={`${taskStats.done} / ${taskStats.total}`} tone="green" />
+          <StatCard label="Overdue" value={taskStats.overdue} tone="red" />
+          <StatCard label="Due soon" value={taskStats.duesoon} tone="amber" />
+          <StatCard label="Scheduled" value={taskStats.future} tone="slate" />
+        </div>
+      </StatSection>
+
+      {/* toolbar */}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
         <div className="relative">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -158,26 +233,14 @@ export default function Dashboard({ project }) {
         <div className="ml-auto flex items-center gap-2">
           {defs.length > 0 && (
             <div className="flex items-center rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
-              <button className="btn-ghost px-1.5 py-1" title="Zoom out" onClick={() => setZoom(cellPx - 3)}>
-                <ZoomOut size={16} />
-              </button>
-              <button className="btn-ghost px-1.5 py-1" title="Fit to width" onClick={fitZoom}>
-                <Maximize2 size={15} />
-              </button>
-              <button className="btn-ghost px-1.5 py-1" title="Zoom in" onClick={() => setZoom(cellPx + 3)}>
-                <ZoomIn size={16} />
-              </button>
+              <button className="btn-ghost px-1.5 py-1" title="Zoom out" onClick={() => setZoom(cellPx - 3)}><ZoomOut size={16} /></button>
+              <button className="btn-ghost px-1.5 py-1" title="Fit to width" onClick={fitZoom}><Maximize2 size={15} /></button>
+              <button className="btn-ghost px-1.5 py-1" title="Zoom in" onClick={() => setZoom(cellPx + 3)}><ZoomIn size={16} /></button>
             </div>
           )}
-          <button className="btn-ghost px-2.5" onClick={load} title="Refresh">
-            <RefreshCw size={16} />
-          </button>
-          <button className="btn-subtle" onClick={() => setImportOpen(true)}>
-            <Upload size={16} /> Import
-          </button>
-          <button className="btn-primary" onClick={() => setAddOpen(true)}>
-            <Plus size={16} /> Add {project.entity_label.toLowerCase()}
-          </button>
+          <button className="btn-ghost px-2.5" onClick={load} title="Refresh"><RefreshCw size={16} /></button>
+          <button className="btn-subtle" onClick={() => setImportOpen(true)}><Upload size={16} /> Import</button>
+          <button className="btn-primary" onClick={() => setAddOpen(true)}><Plus size={16} /> Add {project.entity_label.toLowerCase()}</button>
         </div>
       </div>
 
@@ -188,19 +251,15 @@ export default function Dashboard({ project }) {
             title={data?.rows.length ? "Nothing matches your filters" : `No ${project.entity_label.toLowerCase()}s yet`}
             subtitle={
               data?.rows.length
-                ? "Try clearing the search or status filter."
+                ? "Try clearing the search or filters."
                 : defs.length === 0
                 ? "Define your repeating tasks in the Task template tab first, then add or import entities here."
                 : `Add or import your first ${project.entity_label.toLowerCase()} to start tracking.`
             }
             action={
               <div className="flex gap-2">
-                <button className="btn-subtle" onClick={() => setImportOpen(true)}>
-                  <Upload size={16} /> Import from Excel
-                </button>
-                <button className="btn-primary" onClick={() => setAddOpen(true)}>
-                  <Plus size={16} /> Add {project.entity_label.toLowerCase()}
-                </button>
+                <button className="btn-subtle" onClick={() => setImportOpen(true)}><Upload size={16} /> Import from Excel</button>
+                <button className="btn-primary" onClick={() => setAddOpen(true)}><Plus size={16} /> Add {project.entity_label.toLowerCase()}</button>
               </div>
             }
           />
@@ -210,15 +269,24 @@ export default function Dashboard({ project }) {
             rows={rows}
             entityLabel={project.entity_label}
             cellPx={cellPx}
-            onOpen={(id) => setOpenEntity(id)}
+            goliveFilter={goliveFilter}
+            setGoliveFilter={setGoliveFilter}
+            taskFilters={taskFilters}
+            setTaskFilter={setTaskFilter}
+            onOpen={(id, taskDefId) => setOpen({ id, taskDefId })}
           />
         )}
       </div>
 
       <Legend />
 
-      {openEntity && (
-        <EntityDrawer entityId={openEntity} onClose={() => setOpenEntity(null)} onSaved={load} />
+      {open && (
+        <EntityDrawer
+          entityId={open.id}
+          focusTaskDefId={open.taskDefId}
+          onClose={() => setOpen(null)}
+          onSaved={load}
+        />
       )}
 
       <AddEntityModal
@@ -228,7 +296,7 @@ export default function Dashboard({ project }) {
         onCreated={(e) => {
           setAddOpen(false);
           load();
-          setOpenEntity(e.id);
+          setOpen({ id: e.id });
         }}
       />
 
@@ -237,12 +305,42 @@ export default function Dashboard({ project }) {
   );
 }
 
-function Matrix({ defs, rows, entityLabel, cellPx, onOpen }) {
+function StatSection({ title, open, onToggle, children }) {
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+      >
+        <ChevronDown size={14} className={`transition ${open ? "" : "-rotate-90"}`} />
+        {title}
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
+function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter, taskFilters, setTaskFilter, onOpen }) {
   const square = Math.max(8, Math.min(cellPx - 8, 26));
-  const headBase =
-    "sticky z-20 bg-slate-50/95 px-3 py-3 text-left align-bottom backdrop-blur dark:bg-slate-900/95";
-  const stickyHead = (left, width, extra = "") => ({
-    className: `${headBase} ${extra}`,
+  const [popover, setPopover] = useState(null); // { kind, id, x, y, options, current }
+
+  function openGoliveFilter(ev) {
+    const r = ev.currentTarget.getBoundingClientRect();
+    setPopover({ kind: "golive", x: r.left, y: r.bottom + 4, options: GOLIVE_FILTER_OPTIONS, current: goliveFilter });
+  }
+  function openTaskFilter(ev, id) {
+    const r = ev.currentTarget.getBoundingClientRect();
+    setPopover({ kind: "task", id, x: r.left, y: r.bottom + 4, options: TASK_FILTER_OPTIONS, current: taskFilters[id] || "" });
+  }
+  function choose(v) {
+    if (popover.kind === "golive") setGoliveFilter(v || "all");
+    else setTaskFilter(popover.id, v);
+    setPopover(null);
+  }
+
+  const headBase = "sticky bg-slate-50/95 backdrop-blur dark:bg-slate-900/95";
+  const cornerStyle = (left, width, extra = "") => ({
+    className: `${headBase} top-0 z-30 px-3 py-3 text-left align-bottom ${extra}`,
     style: { left, width, minWidth: width, maxWidth: width },
   });
   const bodyBase =
@@ -254,78 +352,103 @@ function Matrix({ defs, rows, entityLabel, cellPx, onOpen }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
+      <div className="max-h-[64vh] overflow-auto">
         <table className="border-separate border-spacing-0" style={{ tableLayout: "fixed" }}>
           <thead>
             <tr>
-              <th {...stickyHead(0, W_RACK, "px-4")}>
+              <th {...cornerStyle(0, W_RACK, "px-4")}>
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{entityLabel}</span>
               </th>
-              <th {...stickyHead(W_RACK, W_GOLIVE, "hidden md:table-cell")}>
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Go-live</span>
+              <th {...cornerStyle(W_RACK, W_GOLIVE, "hidden md:table-cell")}>
+                <button
+                  onClick={openGoliveFilter}
+                  className={`flex items-center gap-1 text-xs font-bold uppercase tracking-wide ${
+                    goliveFilter !== "all" ? "text-brand-600" : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Go-live <Filter size={11} />
+                </button>
               </th>
-              <th {...stickyHead(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell")}>
+              <th {...cornerStyle(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell")}>
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Status</span>
               </th>
-              {defs.map((d) => (
-                <th
-                  key={d.id}
-                  className="h-40 bg-slate-50/95 align-bottom backdrop-blur dark:bg-slate-900/95"
-                  style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}
-                >
-                  <div className="flex h-36 items-end justify-center pb-2">
-                    <span
-                      className="font-semibold text-slate-600 dark:text-slate-300"
-                      style={{
-                        writingMode: "vertical-rl",
-                        transform: "rotate(180deg)",
-                        maxHeight: "8.5rem",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        fontSize: cellPx < 20 ? "10px" : "12px",
-                      }}
-                      title={`${d.name}${d.responsible ? " — " + d.responsible : ""}`}
+              {defs.map((d) => {
+                const active = !!taskFilters[d.id];
+                return (
+                  <th
+                    key={d.id}
+                    className="sticky top-0 z-20 h-40 bg-slate-50/95 align-bottom backdrop-blur dark:bg-slate-900/95"
+                    style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}
+                  >
+                    <button
+                      onClick={(ev) => openTaskFilter(ev, d.id)}
+                      className="relative flex h-36 w-full items-end justify-center pb-2"
+                      title={`${d.name}${d.responsible ? " — " + d.responsible : ""} (click to filter)`}
                     >
-                      {d.name}
-                    </span>
-                  </div>
-                </th>
-              ))}
+                      {active && (
+                        <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-brand-600" />
+                      )}
+                      <span
+                        className={`font-semibold ${active ? "text-brand-600" : "text-slate-600 dark:text-slate-300"}`}
+                        style={{
+                          writingMode: "vertical-rl",
+                          transform: "rotate(180deg)",
+                          maxHeight: "8.5rem",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontSize: cellPx < 20 ? "10px" : "12px",
+                        }}
+                      >
+                        {d.name}
+                      </span>
+                    </button>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
               const om = OVERALL_META[r.overall] || OVERALL_META.none;
+              const flag = r.has_notes || r.next_step;
               return (
                 <tr key={r.entity_id} className="group cursor-pointer" onClick={() => onOpen(r.entity_id)}>
                   <td {...stickyBody(0, W_RACK, "px-4")}>
-                    <div className="truncate text-sm font-semibold">{r.code || "—"}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold">{r.code || "—"}</span>
+                      {flag && (
+                        <StickyNote
+                          size={13}
+                          className="shrink-0 text-amber-500"
+                          title={r.next_step || "Has notes"}
+                        />
+                      )}
+                    </div>
                     <div className="truncate text-xs text-slate-400">{r.name || r.location}</div>
                   </td>
                   <td {...stickyBody(W_RACK, W_GOLIVE, "hidden md:table-cell")}>
-                    <span className="whitespace-nowrap text-xs text-slate-500">
-                      {r.golive_date ? fmtDate(r.golive_date) : "—"}
-                    </span>
+                    <span className="whitespace-nowrap text-xs text-slate-500">{r.golive_date ? fmtDate(r.golive_date) : "—"}</span>
                   </td>
-                  <td {...stickyBody(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell")}>
-                    <Badge meta={om} />
-                  </td>
+                  <td {...stickyBody(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell")}><Badge meta={om} /></td>
                   {r.cells.map((c) => {
                     const m = STATUS_META[c.status] || STATUS_META.none;
                     const tip =
-                      `${defs.find((d) => d.id === c.task_def_id)?.name || ""}\n` +
-                      `${m.label}` +
+                      `${defs.find((d) => d.id === c.task_def_id)?.name || ""}\n${m.label}` +
                       (c.planned_date ? `\nDeadline: ${c.planned_date}` : "");
                     return (
                       <td
                         key={c.task_def_id}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          onOpen(r.entity_id, c.task_def_id);
+                        }}
                         className="border-t border-slate-100 py-1.5 text-center dark:border-slate-800"
                         style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}
                       >
                         <div
                           title={tip}
-                          className={`mx-auto rounded ring-1 ring-inset ring-black/5 transition group-hover:scale-110 dark:ring-white/5 ${m.cell}`}
+                          className={`mx-auto rounded ring-1 ring-inset ring-black/5 transition hover:scale-125 dark:ring-white/5 ${m.cell}`}
                           style={{ width: square, height: square }}
                         />
                       </td>
@@ -337,6 +460,29 @@ function Matrix({ defs, rows, entityLabel, cellPx, onOpen }) {
           </tbody>
         </table>
       </div>
+
+      {popover && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setPopover(null)} />
+          <div
+            className="card fixed z-50 w-44 overflow-hidden p-1"
+            style={{ left: Math.min(popover.x, window.innerWidth - 190), top: popover.y }}
+          >
+            {popover.options.map((o) => (
+              <button
+                key={o.v}
+                onClick={() => choose(o.v)}
+                className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                  popover.current === o.v ? "font-semibold text-brand-600" : ""
+                }`}
+              >
+                {o.l}
+                {popover.current === o.v && <span className="text-brand-600">✓</span>}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -375,11 +521,9 @@ function StatCard({ label, value, tone }) {
 function AddEntityModal({ open, project, onClose, onCreated }) {
   const [form, setForm] = useState({ code: "", name: "", golive_date: "" });
   const [busy, setBusy] = useState(false);
-
   useEffect(() => {
     if (open) setForm({ code: "", name: "", golive_date: "" });
   }, [open]);
-
   async function submit() {
     if (!form.code.trim() && !form.name.trim()) return;
     setBusy(true);
@@ -394,7 +538,6 @@ function AddEntityModal({ open, project, onClose, onCreated }) {
       setBusy(false);
     }
   }
-
   return (
     <Modal
       open={open}
@@ -409,23 +552,11 @@ function AddEntityModal({ open, project, onClose, onCreated }) {
     >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Code">
-            <input className="input" autoFocus value={form.code} placeholder="001D"
-              onChange={(e) => setForm({ ...form, code: e.target.value })} />
-          </Field>
-          <Field label="Go-live date">
-            <input className="input" type="date" value={form.golive_date}
-              onChange={(e) => setForm({ ...form, golive_date: e.target.value })} />
-          </Field>
+          <Field label="Code"><input className="input" autoFocus value={form.code} placeholder="001D" onChange={(e) => setForm({ ...form, code: e.target.value })} /></Field>
+          <Field label="Go-live date"><input className="input" type="date" value={form.golive_date} onChange={(e) => setForm({ ...form, golive_date: e.target.value })} /></Field>
         </div>
-        <Field label="Name / building">
-          <input className="input" value={form.name} placeholder="Central Office Building"
-            onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        </Field>
-        <p className="flex items-center gap-1.5 text-xs text-slate-500">
-          <CalendarClock size={14} />
-          Task deadlines are calculated automatically from the go-live date.
-        </p>
+        <Field label="Name / building"><input className="input" value={form.name} placeholder="Central Office Building" onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <p className="flex items-center gap-1.5 text-xs text-slate-500"><CalendarClock size={14} /> Task deadlines are calculated automatically from the go-live date.</p>
       </div>
     </Modal>
   );

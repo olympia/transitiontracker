@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   X,
   Trash2,
@@ -13,7 +13,7 @@ import { api } from "../api";
 import { Badge, Spinner, Toggle } from "../components/ui.jsx";
 import { STATUS_META, OVERALL_META, fmtDate } from "../lib/status.js";
 
-export default function EntityDrawer({ entityId, onClose, onSaved }) {
+export default function EntityDrawer({ entityId, focusTaskDefId, onClose, onSaved }) {
   const [e, setE] = useState(null);
   const [tab, setTab] = useState("tasks");
   const [savingMeta, setSavingMeta] = useState(false);
@@ -32,18 +32,19 @@ export default function EntityDrawer({ entityId, onClose, onSaved }) {
     setDirty(true);
   }
 
-  async function saveMeta() {
+  async function saveMeta(overrides = {}) {
     setSavingMeta(true);
     try {
+      const m = { ...e, ...overrides };
       const payload = {
-        code: e.code,
-        name: e.name,
-        location: e.location,
-        next_step: e.next_step,
-        on_hold: e.on_hold,
-        notes: e.notes,
-        golive_date: e.golive_date || null,
-        clear_golive: !e.golive_date,
+        code: m.code,
+        name: m.name,
+        location: m.location,
+        next_step: m.next_step,
+        on_hold: m.on_hold,
+        notes: m.notes,
+        golive_date: m.golive_date || null,
+        clear_golive: !m.golive_date,
       };
       const fresh = await api.updateEntity(entityId, payload);
       setE(fresh);
@@ -52,6 +53,12 @@ export default function EntityDrawer({ entityId, onClose, onSaved }) {
     } finally {
       setSavingMeta(false);
     }
+  }
+
+  function toggleOnHold() {
+    if (!e) return;
+    setE((cur) => ({ ...cur, on_hold: !cur.on_hold }));
+    saveMeta({ on_hold: !e.on_hold });
   }
 
   async function toggleTask(t) {
@@ -85,12 +92,34 @@ export default function EntityDrawer({ entityId, onClose, onSaved }) {
             </div>
             <div className="flex items-center gap-2">
               <button
-                className="btn-primary"
-                onClick={saveMeta}
-                disabled={!dirty || savingMeta}
+                onClick={toggleOnHold}
+                title="Toggle on hold (saved immediately)"
+                className={`btn ${
+                  e?.on_hold
+                    ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
+                    : "btn-subtle"
+                }`}
               >
-                <Save size={16} /> Save
+                <span
+                  className={`grid h-4 w-4 place-items-center rounded border ${
+                    e?.on_hold
+                      ? "border-blue-500 bg-blue-500 text-white"
+                      : "border-slate-300 dark:border-slate-600"
+                  }`}
+                >
+                  {e?.on_hold && <Check size={12} />}
+                </span>
+                On hold
               </button>
+              {dirty && (
+                <button
+                  className="btn-primary"
+                  onClick={() => saveMeta()}
+                  disabled={savingMeta}
+                >
+                  <Save size={16} /> Save
+                </button>
+              )}
               <button className="btn-ghost px-2" onClick={onClose}>
                 <X size={20} />
               </button>
@@ -126,7 +155,9 @@ export default function EntityDrawer({ entityId, onClose, onSaved }) {
           <Spinner />
         ) : (
           <div className="p-6">
-            {tab === "tasks" && <TasksTab e={e} onToggle={toggleTask} />}
+            {tab === "tasks" && (
+              <TasksTab e={e} onToggle={toggleTask} focusId={focusTaskDefId} />
+            )}
             {tab === "details" && <DetailsTab e={e} patch={patch} />}
             {tab === "inventory" && (
               <InventoryTab e={e} reload={load} onSaved={onSaved} />
@@ -152,9 +183,19 @@ export default function EntityDrawer({ entityId, onClose, onSaved }) {
   );
 }
 
-function TasksTab({ e, onToggle }) {
+function TasksTab({ e, onToggle, focusId }) {
   const done = e.tasks.filter((t) => t.done).length;
   const pct = e.tasks.length ? Math.round((done / e.tasks.length) * 100) : 0;
+  const refs = useRef({});
+  const [highlight, setHighlight] = useState(null);
+  useEffect(() => {
+    if (focusId && refs.current[focusId]) {
+      refs.current[focusId].scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlight(focusId);
+      const t = setTimeout(() => setHighlight(null), 2400);
+      return () => clearTimeout(t);
+    }
+  }, [focusId, e.tasks.length]);
   return (
     <div className="space-y-4">
       {!e.golive_date && (
@@ -185,8 +226,17 @@ function TasksTab({ e, onToggle }) {
         )}
         {e.tasks.map((t) => {
           const m = STATUS_META[t.status] || STATUS_META.none;
+          const isFocus = highlight === t.task_def_id;
           return (
-            <div key={t.task_def_id} className="flex items-center gap-3 px-4 py-3">
+            <div
+              key={t.task_def_id}
+              ref={(el) => (refs.current[t.task_def_id] = el)}
+              className={`flex items-center gap-3 px-4 py-3 transition ${
+                isFocus
+                  ? "bg-brand-50 ring-2 ring-inset ring-brand-500/40 dark:bg-brand-500/10"
+                  : ""
+              }`}
+            >
               <button
                 onClick={() => onToggle(t)}
                 className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border transition ${

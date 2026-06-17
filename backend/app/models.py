@@ -56,6 +56,8 @@ class TaskDefinition(Base):
     offset_days: Mapped[int] = mapped_column(Integer, default=0)
     # if true, this task has no hard deadline (never flagged overdue/due-soon)
     no_deadline: Mapped[bool] = mapped_column(Boolean, default=False)
+    # marks the task that represents "go-live" (one per project); used by reports
+    is_golive: Mapped[bool] = mapped_column(Boolean, default=False)
 
     project: Mapped["Project"] = relationship(back_populates="task_definitions")
     instances: Mapped[list["TaskInstance"]] = relationship(

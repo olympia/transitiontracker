@@ -42,6 +42,15 @@ def _sync_instances_for_taskdef(db: Session, taskdef: models.TaskDefinition) -> 
     db.flush()
 
 
+def _enforce_single_golive(db: Session, project_id: int, keep_id: int) -> None:
+    """Only one task definition per project may be the go-live milestone."""
+    db.query(models.TaskDefinition).filter(
+        models.TaskDefinition.project_id == project_id,
+        models.TaskDefinition.id != keep_id,
+        models.TaskDefinition.is_golive == True,  # noqa: E712
+    ).update({"is_golive": False}, synchronize_session=False)
+
+
 def _get_project(db: Session, project_id: int) -> models.Project:
     obj = db.get(models.Project, project_id)
     if not obj:
@@ -132,6 +141,8 @@ def create_task_def(
     obj = models.TaskDefinition(project_id=project_id, **data)
     db.add(obj)
     db.flush()
+    if obj.is_golive:
+        _enforce_single_golive(db, project_id, obj.id)
     _sync_instances_for_taskdef(db, obj)
     db.commit()
     db.refresh(obj)
@@ -151,6 +162,9 @@ def update_task_def(
         raise HTTPException(404, "Task definition not found")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(obj, k, v)
+    db.flush()
+    if obj.is_golive:
+        _enforce_single_golive(db, obj.project_id, obj.id)
     db.commit()
     db.refresh(obj)
     return obj
@@ -241,6 +255,8 @@ def _entity_detail(db: Session, entity: models.Entity) -> schemas.EntityDetail:
             inst.actual_date,
             project.due_soon_days,
         )
+        if entity.on_hold and st["status"] in ("overdue", "duesoon"):
+            st["status"] = "future"
         cell_statuses.append(st["status"])
         tasks.append(
             schemas.TaskCellDetail(
@@ -412,6 +428,9 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
                 inst.actual_date,
                 project.due_soon_days,
             )
+            # an on-hold entity has no pressing tasks: grey out active ones
+            if e.on_hold and st["status"] in ("overdue", "duesoon"):
+                st["status"] = "future"
             if st["status"] == "overdue":
                 overdue_count += 1
             cell_statuses.append(st["status"])
@@ -433,6 +452,7 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
                 location=e.location,
                 golive_date=e.golive_date,
                 next_step=e.next_step,
+                has_notes=bool(e.notes and e.notes.strip()),
                 on_hold=e.on_hold,
                 overall=overall,
                 overdue_count=overdue_count,

@@ -5,9 +5,9 @@ import {
   ChevronUp,
   ChevronDown,
   ListChecks,
-  GripVertical,
+  Flag,
+  Upload,
 } from "lucide-react";
-import { Upload } from "lucide-react";
 import { api } from "../api";
 import { EmptyState, Spinner } from "../components/ui.jsx";
 import ImportModal from "../components/ImportModal.jsx";
@@ -87,12 +87,13 @@ export default function TemplateEditor({ project }) {
         />
       ) : (
         <div className="card overflow-hidden">
-          <div className="grid grid-cols-[2.5rem_1fr_12rem_9rem_8rem_2.5rem] items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-900">
+          <div className="grid grid-cols-[2.5rem_1fr_11rem_7rem_7rem_5.5rem_2.5rem] items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-900">
             <span></span>
             <span>Task</span>
             <span>Responsible</span>
             <span>Offset (days)</span>
             <span>Timing</span>
+            <span>Go-live</span>
             <span></span>
           </div>
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -139,6 +140,7 @@ function Row({ d, idx, count, onChanged, onMove }) {
       responsible: next.responsible,
       offset_days: Number(next.offset_days) || 0,
       no_deadline: next.no_deadline,
+      is_golive: next.is_golive,
     });
     onChanged?.();
   }
@@ -148,7 +150,7 @@ function Row({ d, idx, count, onChanged, onMove }) {
   }
 
   return (
-    <div className="grid grid-cols-[2.5rem_1fr_12rem_9rem_8rem_2.5rem] items-center gap-2 px-3 py-2">
+    <div className="grid grid-cols-[2.5rem_1fr_11rem_7rem_7rem_5.5rem_2.5rem] items-center gap-2 px-3 py-2">
       <div className="flex flex-col items-center text-slate-300">
         <button
           className="hover:text-brand-600 disabled:opacity-30"
@@ -199,6 +201,18 @@ function Row({ d, idx, count, onChanged, onMove }) {
           {local.no_deadline ? "✓ No deadline" : "Set no deadline"}
         </button>
       </div>
+      <button
+        onClick={() => save({ is_golive: !local.is_golive })}
+        title={local.is_golive ? "Go-live milestone" : "Mark as go-live milestone"}
+        className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+          local.is_golive
+            ? "bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300"
+            : "text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+        }`}
+      >
+        <Flag size={14} />
+        {local.is_golive ? "Go-live" : "Set"}
+      </button>
       <button className="text-slate-300 hover:text-rose-500" onClick={remove}>
         <Trash2 size={16} />
       </button>

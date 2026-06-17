@@ -3,6 +3,7 @@ import {
   LayoutGrid,
   ListChecks,
   FolderKanban,
+  BarChart3,
   Moon,
   Sun,
   ChevronDown,
@@ -13,6 +14,7 @@ import { Spinner, Modal, Field } from "./components/ui.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import TemplateEditor from "./pages/TemplateEditor.jsx";
 import Projects from "./pages/Projects.jsx";
+import Report from "./pages/Report.jsx";
 
 function useTheme() {
   const [dark, setDark] = useState(
@@ -30,6 +32,7 @@ function useTheme() {
 
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
+  { id: "report", label: "Report", icon: BarChart3 },
   { id: "template", label: "Task template", icon: ListChecks },
   { id: "projects", label: "Projects", icon: FolderKanban },
 ];
@@ -183,6 +186,8 @@ export default function App() {
           <Projects projects={projects} onChange={loadProjects} />
         ) : tab === "dashboard" ? (
           <Dashboard project={project} />
+        ) : tab === "report" ? (
+          <Report project={project} />
         ) : tab === "template" ? (
           <TemplateEditor project={project} />
         ) : (

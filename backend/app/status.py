@@ -36,7 +36,8 @@ def task_status(
 ) -> dict:
     today = today or date.today()
     is_done = bool(done or actual_date)
-    planned = planned_date(golive, offset_days)
+    # no-deadline tasks never get a calculated deadline date
+    planned = None if no_deadline else planned_date(golive, offset_days)
 
     if is_done:
         status = "done"

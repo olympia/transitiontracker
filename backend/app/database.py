@@ -57,6 +57,7 @@ def bootstrap(retries: int = 15, delay: int = 3) -> None:
             from app import models  # noqa: F401  (register models)
 
             Base.metadata.create_all(bind=engine)
+            _run_migrations()
             print(f"[db] connected to {DB_HOST}:{DB_PORT}/{DB_NAME}", flush=True)
             return
         except Exception as exc:  # noqa: BLE001
@@ -67,6 +68,23 @@ def bootstrap(retries: int = 15, delay: int = 3) -> None:
             )
             time.sleep(delay)
     raise RuntimeError(f"Database bootstrap failed after {retries} attempts: {last_err}")
+
+
+def _run_migrations() -> None:
+    """Lightweight, idempotent column additions for existing databases.
+    create_all() does not ALTER existing tables, so new columns are added here.
+    MariaDB/MySQL 8 support ADD COLUMN IF NOT EXISTS."""
+    statements = [
+        "ALTER TABLE task_definitions "
+        "ADD COLUMN IF NOT EXISTS is_golive TINYINT(1) NOT NULL DEFAULT 0",
+    ]
+    with engine.connect() as conn:
+        for stmt in statements:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception as exc:  # noqa: BLE001
+                print(f"[db] migration skipped ({exc})", flush=True)
 
 
 def get_db():
