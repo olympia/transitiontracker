@@ -7,13 +7,14 @@ Per task (entity x task definition):
   - planned in the further future -> "future" (grey)
   - no go-live date, or task has no deadline -> "none" (blank)
 
-Per entity (overall):
-  - on hold        -> "onhold"
+Per entity (overall) = the worst status among its tasks, unless on hold:
+  - on hold        -> "onhold"  (blue, overrides everything)
   - no go-live     -> "none"
-  - any overdue    -> "red"
-  - else any duesoon -> "amber"
-  - else           -> "green"
-Future tasks that are not yet due do not pull the overall down (same as Excel).
+  - any overdue    -> "delayed"   (red)
+  - else any duesoon -> "duesoon" (orange)
+  - else any future  -> "ontrack" (grey: not done, but nothing pressing)
+  - else all done    -> "completed" (green)
+"none" tasks (no deadline / no go-live) are ignored in the roll-up.
 """
 from datetime import date, timedelta
 
@@ -61,8 +62,13 @@ def overall_status(on_hold: bool, golive: date | None, cell_statuses: list[str])
         return "onhold"
     if golive is None:
         return "none"
-    if "overdue" in cell_statuses:
-        return "red"
-    if "duesoon" in cell_statuses:
-        return "amber"
-    return "green"
+    countable = [s for s in cell_statuses if s != "none"]
+    if "overdue" in countable:
+        return "delayed"
+    if "duesoon" in countable:
+        return "duesoon"
+    if "future" in countable:
+        return "ontrack"
+    if "done" in countable:
+        return "completed"
+    return "none"

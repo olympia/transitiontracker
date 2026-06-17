@@ -2,7 +2,7 @@
 
 export const STATUS_META = {
   done: {
-    label: "Done",
+    label: "Completed",
     dot: "bg-emerald-500",
     cell: "bg-emerald-500",
     soft: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/20",
@@ -22,7 +22,7 @@ export const STATUS_META = {
   future: {
     label: "Scheduled",
     dot: "bg-slate-300 dark:bg-slate-600",
-    cell: "bg-slate-200 dark:bg-slate-700",
+    cell: "bg-slate-300 dark:bg-slate-600",
     soft: "bg-slate-100 text-slate-500 ring-slate-400/20 dark:bg-slate-800 dark:text-slate-400",
   },
   none: {
@@ -34,25 +34,30 @@ export const STATUS_META = {
 };
 
 export const OVERALL_META = {
-  green: {
-    label: "On track",
+  completed: {
+    label: "Completed",
     soft: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/15 dark:text-emerald-300",
     dot: "bg-emerald-500",
   },
-  amber: {
-    label: "In progress",
+  ontrack: {
+    label: "On track",
+    soft: "bg-slate-100 text-slate-600 ring-slate-400/20 dark:bg-slate-800 dark:text-slate-300",
+    dot: "bg-slate-400",
+  },
+  duesoon: {
+    label: "Due soon",
     soft: "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-400/15 dark:text-amber-300",
     dot: "bg-amber-400",
   },
-  red: {
+  delayed: {
     label: "Delayed",
     soft: "bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/15 dark:text-rose-300",
     dot: "bg-rose-500",
   },
   onhold: {
     label: "On hold",
-    soft: "bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-500/15 dark:text-violet-300",
-    dot: "bg-violet-500",
+    soft: "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/15 dark:text-blue-300",
+    dot: "bg-blue-500",
   },
   none: {
     label: "No go-live",

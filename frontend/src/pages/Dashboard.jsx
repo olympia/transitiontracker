@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Search,
@@ -6,6 +6,9 @@ import {
   RefreshCw,
   CalendarClock,
   Upload,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
 } from "lucide-react";
 import { api } from "../api";
 import { Badge, EmptyState, Spinner, Modal, Field } from "../components/ui.jsx";
@@ -15,18 +18,19 @@ import EntityDrawer from "./EntityDrawer.jsx";
 
 const FILTERS = [
   { id: "all", label: "All" },
-  { id: "red", label: "Delayed" },
-  { id: "amber", label: "In progress" },
-  { id: "green", label: "On track" },
+  { id: "delayed", label: "Delayed" },
+  { id: "duesoon", label: "Due soon" },
+  { id: "ontrack", label: "On track" },
+  { id: "completed", label: "Completed" },
   { id: "onhold", label: "On hold" },
   { id: "none", label: "No go-live" },
 ];
 
-// Fixed widths so the sticky left columns and their offsets line up exactly.
-const W_RACK = 200;
-const W_GOLIVE = 120;
-const W_STATUS = 150;
-const TASK_W = 44;
+const W_RACK = 184;
+const W_GOLIVE = 104;
+const W_STATUS = 132;
+const MIN_CELL = 12;
+const MAX_CELL = 44;
 
 export default function Dashboard({ project }) {
   const [data, setData] = useState(null);
@@ -36,6 +40,14 @@ export default function Dashboard({ project }) {
   const [openEntity, setOpenEntity] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+
+  // zoom: userZoom (px) overrides the auto-fit size; null = auto-fit
+  const [userZoom, setUserZoom] = useState(() => {
+    const v = Number(localStorage.getItem("tt-zoom"));
+    return v > 0 ? v : null;
+  });
+  const [autoFit, setAutoFit] = useState(28);
+  const wrapRef = useRef(null);
 
   async function load() {
     setLoading(true);
@@ -51,12 +63,42 @@ export default function Dashboard({ project }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
+  const defs = data?.task_definitions ?? [];
+  const nTasks = Math.max(defs.length, 1);
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const isMd = window.matchMedia("(min-width: 768px)").matches;
+      const sticky = isMd ? W_RACK + W_GOLIVE + W_STATUS : W_RACK;
+      const avail = el.clientWidth - sticky - 6;
+      const fit = Math.floor(avail / nTasks);
+      setAutoFit(Math.max(MIN_CELL, Math.min(MAX_CELL, fit)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [nTasks, data]);
+
+  const cellPx = userZoom ?? autoFit;
+
+  function setZoom(next) {
+    const v = Math.max(MIN_CELL, Math.min(MAX_CELL, next));
+    setUserZoom(v);
+    localStorage.setItem("tt-zoom", String(v));
+  }
+  function fitZoom() {
+    setUserZoom(null);
+    localStorage.removeItem("tt-zoom");
+  }
+
   const stats = useMemo(() => {
-    const s = { total: 0, green: 0, amber: 0, red: 0, onhold: 0, none: 0, overdue: 0 };
+    const s = { total: 0, completed: 0, ontrack: 0, duesoon: 0, delayed: 0, onhold: 0, none: 0 };
     data?.rows.forEach((r) => {
       s.total++;
-      s[r.overall]++;
-      s.overdue += r.overdue_count;
+      s[r.overall] = (s[r.overall] || 0) + 1;
     });
     return s;
   }, [data]);
@@ -77,29 +119,22 @@ export default function Dashboard({ project }) {
 
   if (loading && !data) return <Spinner />;
 
-  const defs = data?.task_definitions ?? [];
-
   return (
     <div className="space-y-5">
-      {/* stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label={project.entity_label + "s"} value={stats.total} tone="brand" />
-        <StatCard label="On track" value={stats.green} tone="green" />
-        <StatCard label="In progress" value={stats.amber} tone="amber" />
-        <StatCard label="Delayed" value={stats.red} tone="red" />
-        <StatCard label="On hold" value={stats.onhold} tone="violet" />
-        <StatCard label="Overdue tasks" value={stats.overdue} tone="rose" />
+        <StatCard label="Completed" value={stats.completed} tone="green" />
+        <StatCard label="On track" value={stats.ontrack} tone="slate" />
+        <StatCard label="Due soon" value={stats.duesoon} tone="amber" />
+        <StatCard label="Delayed" value={stats.delayed} tone="red" />
+        <StatCard label="On hold" value={stats.onhold} tone="blue" />
       </div>
 
-      {/* toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
-          <Search
-            size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-          />
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            className="input w-64 pl-9"
+            className="input w-56 pl-9"
             placeholder={`Search ${project.entity_label.toLowerCase()}s...`}
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -121,6 +156,19 @@ export default function Dashboard({ project }) {
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {defs.length > 0 && (
+            <div className="flex items-center rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+              <button className="btn-ghost px-1.5 py-1" title="Zoom out" onClick={() => setZoom(cellPx - 3)}>
+                <ZoomOut size={16} />
+              </button>
+              <button className="btn-ghost px-1.5 py-1" title="Fit to width" onClick={fitZoom}>
+                <Maximize2 size={15} />
+              </button>
+              <button className="btn-ghost px-1.5 py-1" title="Zoom in" onClick={() => setZoom(cellPx + 3)}>
+                <ZoomIn size={16} />
+              </button>
+            </div>
+          )}
           <button className="btn-ghost px-2.5" onClick={load} title="Refresh">
             <RefreshCw size={16} />
           </button>
@@ -133,50 +181,44 @@ export default function Dashboard({ project }) {
         </div>
       </div>
 
-      {/* matrix */}
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={LayoutGrid}
-          title={
-            data?.rows.length
-              ? "Nothing matches your filters"
-              : `No ${project.entity_label.toLowerCase()}s yet`
-          }
-          subtitle={
-            data?.rows.length
-              ? "Try clearing the search or status filter."
-              : defs.length === 0
-              ? "Define your repeating tasks in the Task template tab first, then add or import entities here."
-              : `Add or import your first ${project.entity_label.toLowerCase()} to start tracking.`
-          }
-          action={
-            <div className="flex gap-2">
-              <button className="btn-subtle" onClick={() => setImportOpen(true)}>
-                <Upload size={16} /> Import from Excel
-              </button>
-              <button className="btn-primary" onClick={() => setAddOpen(true)}>
-                <Plus size={16} /> Add {project.entity_label.toLowerCase()}
-              </button>
-            </div>
-          }
-        />
-      ) : (
-        <Matrix
-          defs={defs}
-          rows={rows}
-          entityLabel={project.entity_label}
-          onOpen={(id) => setOpenEntity(id)}
-        />
-      )}
+      <div ref={wrapRef}>
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={LayoutGrid}
+            title={data?.rows.length ? "Nothing matches your filters" : `No ${project.entity_label.toLowerCase()}s yet`}
+            subtitle={
+              data?.rows.length
+                ? "Try clearing the search or status filter."
+                : defs.length === 0
+                ? "Define your repeating tasks in the Task template tab first, then add or import entities here."
+                : `Add or import your first ${project.entity_label.toLowerCase()} to start tracking.`
+            }
+            action={
+              <div className="flex gap-2">
+                <button className="btn-subtle" onClick={() => setImportOpen(true)}>
+                  <Upload size={16} /> Import from Excel
+                </button>
+                <button className="btn-primary" onClick={() => setAddOpen(true)}>
+                  <Plus size={16} /> Add {project.entity_label.toLowerCase()}
+                </button>
+              </div>
+            }
+          />
+        ) : (
+          <Matrix
+            defs={defs}
+            rows={rows}
+            entityLabel={project.entity_label}
+            cellPx={cellPx}
+            onOpen={(id) => setOpenEntity(id)}
+          />
+        )}
+      </div>
 
       <Legend />
 
       {openEntity && (
-        <EntityDrawer
-          entityId={openEntity}
-          onClose={() => setOpenEntity(null)}
-          onSaved={load}
-        />
+        <EntityDrawer entityId={openEntity} onClose={() => setOpenEntity(null)} onSaved={load} />
       )}
 
       <AddEntityModal
@@ -190,17 +232,13 @@ export default function Dashboard({ project }) {
         }}
       />
 
-      <ImportModal
-        open={importOpen}
-        project={project}
-        onClose={() => setImportOpen(false)}
-        onDone={load}
-      />
+      <ImportModal open={importOpen} project={project} onClose={() => setImportOpen(false)} onDone={load} />
     </div>
   );
 }
 
-function Matrix({ defs, rows, entityLabel, onOpen }) {
+function Matrix({ defs, rows, entityLabel, cellPx, onOpen }) {
+  const square = Math.max(8, Math.min(cellPx - 8, 26));
   const headBase =
     "sticky z-20 bg-slate-50/95 px-3 py-3 text-left align-bottom backdrop-blur dark:bg-slate-900/95";
   const stickyHead = (left, width, extra = "") => ({
@@ -217,33 +255,27 @@ function Matrix({ defs, rows, entityLabel, onOpen }) {
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full border-separate border-spacing-0" style={{ tableLayout: "fixed" }}>
+        <table className="border-separate border-spacing-0" style={{ tableLayout: "fixed" }}>
           <thead>
             <tr>
               <th {...stickyHead(0, W_RACK, "px-4")}>
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  {entityLabel}
-                </span>
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{entityLabel}</span>
               </th>
               <th {...stickyHead(W_RACK, W_GOLIVE, "hidden md:table-cell")}>
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Go-live
-                </span>
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Go-live</span>
               </th>
               <th {...stickyHead(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell")}>
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Status
-                </span>
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Status</span>
               </th>
               {defs.map((d) => (
                 <th
                   key={d.id}
                   className="h-40 bg-slate-50/95 align-bottom backdrop-blur dark:bg-slate-900/95"
-                  style={{ width: TASK_W, minWidth: TASK_W, maxWidth: TASK_W }}
+                  style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}
                 >
                   <div className="flex h-36 items-end justify-center pb-2">
                     <span
-                      className="text-xs font-semibold text-slate-600 dark:text-slate-300"
+                      className="font-semibold text-slate-600 dark:text-slate-300"
                       style={{
                         writingMode: "vertical-rl",
                         transform: "rotate(180deg)",
@@ -251,6 +283,7 @@ function Matrix({ defs, rows, entityLabel, onOpen }) {
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
+                        fontSize: cellPx < 20 ? "10px" : "12px",
                       }}
                       title={`${d.name}${d.responsible ? " — " + d.responsible : ""}`}
                     >
@@ -265,16 +298,10 @@ function Matrix({ defs, rows, entityLabel, onOpen }) {
             {rows.map((r) => {
               const om = OVERALL_META[r.overall] || OVERALL_META.none;
               return (
-                <tr
-                  key={r.entity_id}
-                  className="group cursor-pointer"
-                  onClick={() => onOpen(r.entity_id)}
-                >
+                <tr key={r.entity_id} className="group cursor-pointer" onClick={() => onOpen(r.entity_id)}>
                   <td {...stickyBody(0, W_RACK, "px-4")}>
                     <div className="truncate text-sm font-semibold">{r.code || "—"}</div>
-                    <div className="truncate text-xs text-slate-400">
-                      {r.name || r.location}
-                    </div>
+                    <div className="truncate text-xs text-slate-400">{r.name || r.location}</div>
                   </td>
                   <td {...stickyBody(W_RACK, W_GOLIVE, "hidden md:table-cell")}>
                     <span className="whitespace-nowrap text-xs text-slate-500">
@@ -289,17 +316,17 @@ function Matrix({ defs, rows, entityLabel, onOpen }) {
                     const tip =
                       `${defs.find((d) => d.id === c.task_def_id)?.name || ""}\n` +
                       `${m.label}` +
-                      (c.planned_date ? `\nPlanned: ${c.planned_date}` : "") +
-                      (c.actual_date ? `\nActual: ${c.actual_date}` : "");
+                      (c.planned_date ? `\nDeadline: ${c.planned_date}` : "");
                     return (
                       <td
                         key={c.task_def_id}
                         className="border-t border-slate-100 py-1.5 text-center dark:border-slate-800"
-                        style={{ width: TASK_W, minWidth: TASK_W, maxWidth: TASK_W }}
+                        style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}
                       >
                         <div
                           title={tip}
-                          className={`mx-auto h-6 w-6 rounded-md ring-1 ring-inset ring-black/5 transition group-hover:scale-110 dark:ring-white/5 ${m.cell}`}
+                          className={`mx-auto rounded ring-1 ring-inset ring-black/5 transition group-hover:scale-110 dark:ring-white/5 ${m.cell}`}
+                          style={{ width: square, height: square }}
                         />
                       </td>
                     );
@@ -320,9 +347,7 @@ function Legend() {
     <div className="flex flex-wrap items-center gap-4 px-1 text-xs text-slate-500">
       {items.map((k) => (
         <div key={k} className="flex items-center gap-1.5">
-          <span
-            className={`h-3.5 w-3.5 rounded ${STATUS_META[k].cell} ring-1 ring-inset ring-black/10 dark:ring-white/10`}
-          />
+          <span className={`h-3.5 w-3.5 rounded ${STATUS_META[k].cell} ring-1 ring-inset ring-black/10 dark:ring-white/10`} />
           {STATUS_META[k].label}
         </div>
       ))}
@@ -336,14 +361,12 @@ function StatCard({ label, value, tone }) {
     green: "text-emerald-600",
     amber: "text-amber-600",
     red: "text-rose-600",
-    rose: "text-rose-600",
-    violet: "text-violet-600",
+    blue: "text-blue-600",
+    slate: "text-slate-500",
   };
   return (
     <div className="card px-4 py-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {label}
-      </div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
       <div className={`mt-1 text-2xl font-extrabold ${tones[tone]}`}>{value}</div>
     </div>
   );
@@ -379,42 +402,25 @@ function AddEntityModal({ open, project, onClose, onCreated }) {
       title={`Add ${project.entity_label.toLowerCase()}`}
       footer={
         <>
-          <button className="btn-subtle" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn-primary" onClick={submit} disabled={busy}>
-            Create
-          </button>
+          <button className="btn-subtle" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={submit} disabled={busy}>Create</button>
         </>
       }
     >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Code">
-            <input
-              className="input"
-              autoFocus
-              value={form.code}
-              placeholder="001D"
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-            />
+            <input className="input" autoFocus value={form.code} placeholder="001D"
+              onChange={(e) => setForm({ ...form, code: e.target.value })} />
           </Field>
           <Field label="Go-live date">
-            <input
-              className="input"
-              type="date"
-              value={form.golive_date}
-              onChange={(e) => setForm({ ...form, golive_date: e.target.value })}
-            />
+            <input className="input" type="date" value={form.golive_date}
+              onChange={(e) => setForm({ ...form, golive_date: e.target.value })} />
           </Field>
         </div>
         <Field label="Name / building">
-          <input
-            className="input"
-            value={form.name}
-            placeholder="Central Office Building"
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
+          <input className="input" value={form.name} placeholder="Central Office Building"
+            onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
         <p className="flex items-center gap-1.5 text-xs text-slate-500">
           <CalendarClock size={14} />

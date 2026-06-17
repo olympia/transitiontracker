@@ -56,21 +56,7 @@ export default function EntityDrawer({ entityId, onClose, onSaved }) {
 
   async function toggleTask(t) {
     const next = !t.done;
-    await api.updateInstance(t.instance_id, {
-      done: next,
-      actual_date: next ? new Date().toISOString().slice(0, 10) : null,
-      clear_actual: !next,
-    });
-    await load();
-    onSaved?.();
-  }
-
-  async function setActual(t, date) {
-    await api.updateInstance(t.instance_id, {
-      actual_date: date || null,
-      done: !!date,
-      clear_actual: !date,
-    });
+    await api.updateInstance(t.instance_id, { done: next, clear_actual: !next });
     await load();
     onSaved?.();
   }
@@ -140,9 +126,7 @@ export default function EntityDrawer({ entityId, onClose, onSaved }) {
           <Spinner />
         ) : (
           <div className="p-6">
-            {tab === "tasks" && (
-              <TasksTab e={e} onToggle={toggleTask} onActual={setActual} />
-            )}
+            {tab === "tasks" && <TasksTab e={e} onToggle={toggleTask} />}
             {tab === "details" && <DetailsTab e={e} patch={patch} />}
             {tab === "inventory" && (
               <InventoryTab e={e} reload={load} onSaved={onSaved} />
@@ -168,7 +152,7 @@ export default function EntityDrawer({ entityId, onClose, onSaved }) {
   );
 }
 
-function TasksTab({ e, onToggle, onActual }) {
+function TasksTab({ e, onToggle }) {
   const done = e.tasks.filter((t) => t.done).length;
   const pct = e.tasks.length ? Math.round((done / e.tasks.length) * 100) : 0;
   return (
@@ -215,21 +199,19 @@ function TasksTab({ e, onToggle, onActual }) {
               </button>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{t.name}</div>
-                <div className="flex items-center gap-2 text-xs text-slate-400">
-                  {t.responsible && <span>{t.responsible}</span>}
-                  {t.planned_date && (
-                    <span>· plan {fmtDate(t.planned_date)}</span>
-                  )}
+                {t.responsible && (
+                  <div className="truncate text-xs text-slate-400">{t.responsible}</div>
+                )}
+              </div>
+              <div className="w-28 shrink-0 text-right">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Deadline
+                </div>
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  {t.planned_date ? fmtDate(t.planned_date) : "—"}
                 </div>
               </div>
               <Badge meta={m} />
-              <input
-                type="date"
-                className="input w-[150px] py-1.5 text-xs"
-                value={t.actual_date || ""}
-                onChange={(ev) => onActual(t, ev.target.value)}
-                title="Actual completion date"
-              />
             </div>
           );
         })}
