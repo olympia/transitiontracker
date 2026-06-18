@@ -104,6 +104,7 @@ class EntityBase(BaseModel):
     location: str = ""
     golive_date: date | None = None
     next_step: str = ""
+    next_step_due: date | None = None
     on_hold: bool = False
     notes: str = ""
     position: int = 0
@@ -120,6 +121,8 @@ class EntityUpdate(BaseModel):
     golive_date: date | None = None
     clear_golive: bool = False
     next_step: str | None = None
+    next_step_due: date | None = None
+    clear_next_step_due: bool = False
     on_hold: bool | None = None
     notes: str | None = None
     position: int | None = None
@@ -166,6 +169,7 @@ class MatrixRow(BaseModel):
     location: str
     golive_date: date | None
     next_step: str
+    next_step_due: date | None
     has_notes: bool
     on_hold: bool
     overall: str

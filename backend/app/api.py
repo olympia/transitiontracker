@@ -255,8 +255,8 @@ def _entity_detail(db: Session, entity: models.Entity) -> schemas.EntityDetail:
             inst.actual_date,
             project.due_soon_days,
         )
-        if entity.on_hold and st["status"] in ("overdue", "duesoon"):
-            st["status"] = "future"
+        if entity.on_hold and st["status"] in ("overdue", "duesoon", "future"):
+            st["status"] = "onhold"
         cell_statuses.append(st["status"])
         tasks.append(
             schemas.TaskCellDetail(
@@ -299,10 +299,13 @@ def update_entity(
     entity = _get_entity(db, entity_id)
     data = payload.model_dump(exclude_unset=True)
     clear = data.pop("clear_golive", False)
+    clear_nsd = data.pop("clear_next_step_due", False)
     for k, v in data.items():
         setattr(entity, k, v)
     if clear:
         entity.golive_date = None
+    if clear_nsd:
+        entity.next_step_due = None
     db.flush()
     detail = _entity_detail(db, entity)
     db.commit()
@@ -428,9 +431,9 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
                 inst.actual_date,
                 project.due_soon_days,
             )
-            # an on-hold entity has no pressing tasks: grey out active ones
-            if e.on_hold and st["status"] in ("overdue", "duesoon"):
-                st["status"] = "future"
+            # an on-hold entity has no pressing tasks: show them as on hold
+            if e.on_hold and st["status"] in ("overdue", "duesoon", "future"):
+                st["status"] = "onhold"
             if st["status"] == "overdue":
                 overdue_count += 1
             cell_statuses.append(st["status"])
@@ -452,6 +455,7 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
                 location=e.location,
                 golive_date=e.golive_date,
                 next_step=e.next_step,
+                next_step_due=e.next_step_due,
                 has_notes=bool(e.notes and e.notes.strip()),
                 on_hold=e.on_hold,
                 overall=overall,

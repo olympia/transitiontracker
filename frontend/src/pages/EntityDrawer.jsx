@@ -7,15 +7,16 @@ import {
   MapPin,
   Server,
   StickyNote,
+  Footprints,
   Save,
 } from "lucide-react";
 import { api } from "../api";
 import { Badge, Spinner, Toggle } from "../components/ui.jsx";
 import { STATUS_META, OVERALL_META, fmtDate } from "../lib/status.js";
 
-export default function EntityDrawer({ entityId, focusTaskDefId, onClose, onSaved }) {
+export default function EntityDrawer({ entityId, initialTab, onClose, onSaved }) {
   const [e, setE] = useState(null);
-  const [tab, setTab] = useState("tasks");
+  const [tab, setTab] = useState(initialTab || "tasks");
   const [savingMeta, setSavingMeta] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -41,6 +42,8 @@ export default function EntityDrawer({ entityId, focusTaskDefId, onClose, onSave
         name: m.name,
         location: m.location,
         next_step: m.next_step,
+        next_step_due: m.next_step_due || null,
+        clear_next_step_due: !m.next_step_due,
         on_hold: m.on_hold,
         notes: m.notes,
         golive_date: m.golive_date || null,
@@ -129,6 +132,7 @@ export default function EntityDrawer({ entityId, focusTaskDefId, onClose, onSave
           <div className="mt-4 flex gap-1">
             {[
               { id: "tasks", label: "Tasks", icon: Check },
+              { id: "nextstep", label: "Next step", icon: Footprints },
               { id: "details", label: "Details", icon: MapPin },
               { id: "inventory", label: "Inventory", icon: Server },
               { id: "notes", label: "Notes", icon: StickyNote },
@@ -155,9 +159,8 @@ export default function EntityDrawer({ entityId, focusTaskDefId, onClose, onSave
           <Spinner />
         ) : (
           <div className="p-6">
-            {tab === "tasks" && (
-              <TasksTab e={e} onToggle={toggleTask} focusId={focusTaskDefId} />
-            )}
+            {tab === "tasks" && <TasksTab e={e} onToggle={toggleTask} />}
+            {tab === "nextstep" && <NextStepTab e={e} patch={patch} />}
             {tab === "details" && <DetailsTab e={e} patch={patch} />}
             {tab === "inventory" && (
               <InventoryTab e={e} reload={load} onSaved={onSaved} />
@@ -309,15 +312,6 @@ function DetailsTab({ e, patch }) {
           onChange={(ev) => patch({ location: ev.target.value })}
         />
       </div>
-      <div>
-        <label className="label">Next step</label>
-        <input
-          className="input"
-          value={e.next_step || ""}
-          placeholder='e.g. "Waiting for cabling" or "On hold - access"'
-          onChange={(ev) => patch({ next_step: ev.target.value })}
-        />
-      </div>
       <div className="card flex items-center justify-between px-4 py-3">
         <div>
           <div className="text-sm font-semibold">On hold</div>
@@ -333,6 +327,52 @@ function DetailsTab({ e, patch }) {
       <p className="text-xs text-slate-400">
         Changes are applied when you press Save in the header.
       </p>
+    </div>
+  );
+}
+
+function NextStepTab({ e, patch }) {
+  const due = e.next_step_due ? new Date(e.next_step_due + "T00:00:00") : null;
+  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00");
+  const overdue = due && due < today;
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="label">Next step</label>
+        <input
+          className="input"
+          value={e.next_step || ""}
+          placeholder='e.g. "Waiting for cabling access"'
+          onChange={(ev) => patch({ next_step: ev.target.value })}
+        />
+      </div>
+      <div>
+        <label className="label">Next step due</label>
+        <input
+          className="input"
+          type="date"
+          value={e.next_step_due || ""}
+          onChange={(ev) => patch({ next_step_due: ev.target.value })}
+        />
+      </div>
+      {e.next_step && (
+        <div
+          className={`rounded-xl px-4 py-3 text-sm ring-1 ring-inset ${
+            !e.next_step_due
+              ? "bg-slate-100 text-slate-500 ring-slate-300/30 dark:bg-slate-800 dark:text-slate-400"
+              : overdue
+              ? "bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-300"
+              : "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+          }`}
+        >
+          {!e.next_step_due
+            ? "No due date set — the matrix flag shows grey."
+            : overdue
+            ? `Overdue since ${fmtDate(e.next_step_due)} — the matrix flag shows red.`
+            : `Due ${fmtDate(e.next_step_due)} — the matrix flag shows green.`}
+        </div>
+      )}
+      <p className="text-xs text-slate-400">Changes are applied when you press Save in the header.</p>
     </div>
   );
 }

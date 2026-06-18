@@ -77,6 +77,8 @@ def _run_migrations() -> None:
     statements = [
         "ALTER TABLE task_definitions "
         "ADD COLUMN IF NOT EXISTS is_golive TINYINT(1) NOT NULL DEFAULT 0",
+        "ALTER TABLE entities "
+        "ADD COLUMN IF NOT EXISTS next_step_due DATE NULL",
     ]
     with engine.connect() as conn:
         for stmt in statements:

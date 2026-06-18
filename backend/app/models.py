@@ -80,6 +80,7 @@ class Entity(Base):
     location: Mapped[str] = mapped_column(String(500), default="")  # GPS / address / link
     golive_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     next_step: Mapped[str] = mapped_column(String(500), default="")
+    next_step_due: Mapped[Date | None] = mapped_column(Date, nullable=True)
     on_hold: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str] = mapped_column(Text, default="")
 

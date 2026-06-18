@@ -80,7 +80,7 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/80">
-        <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-4 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-[2400px] items-center gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand-600 text-white shadow-soft">
               <LayoutGrid size={18} />
@@ -158,7 +158,7 @@ export default function App() {
         </div>
 
         {/* tabs */}
-        <div className="mx-auto max-w-[1500px] px-4 sm:px-6">
+        <div className="mx-auto max-w-[2400px] px-4 sm:px-6">
           <nav className="flex gap-1">
             {TABS.map((t) => {
               const Icon = t.icon;
@@ -181,7 +181,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-[2400px] px-4 py-6 sm:px-6">
         {!project ? (
           <Projects projects={projects} onChange={loadProjects} />
         ) : tab === "dashboard" ? (
