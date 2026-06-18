@@ -4,9 +4,9 @@ import { X } from "lucide-react";
 export function Badge({ meta, children }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${meta.soft}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${meta.soft}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`} />
       {children ?? meta.label}
     </span>
   );

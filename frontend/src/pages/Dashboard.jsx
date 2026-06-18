@@ -18,7 +18,7 @@ const TASK_FILTER_OPTIONS = [
   { v: "duesoon", l: "Due soon" }, { v: "future", l: "Scheduled" }, { v: "onhold", l: "On hold" }, { v: "none", l: "Not set" },
 ];
 const GOLIVE_FILTER_OPTIONS = [{ v: "all", l: "All" }, { v: "has", l: "Has date" }, { v: "none", l: "No date" }];
-const W_RACK = 240, W_GOLIVE = 104, W_STATUS = 132, W_NEXT = 96, MIN_CELL = 12, MAX_CELL = 44;
+const W_RACK = 240, W_GOLIVE = 104, W_STATUS = 168, W_NEXT = 96, MIN_CELL = 12, MAX_CELL = 44;
 function lsBool(key, def) { const v = localStorage.getItem(key); return v === null ? def : v === "1"; }
 
 export default function Dashboard({ project }) {

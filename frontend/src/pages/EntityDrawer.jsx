@@ -75,7 +75,7 @@ export default function EntityDrawer({ entityId, initialTab, onClose, onSaved })
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm">
       <div
-        className="h-full w-full max-w-4xl overflow-y-auto bg-slate-50 shadow-2xl dark:bg-slate-950"
+        className="h-full w-full max-w-6xl overflow-y-auto bg-slate-50 shadow-2xl dark:bg-slate-950"
         onClick={(ev) => ev.stopPropagation()}
       >
         {/* header */}
@@ -257,9 +257,9 @@ function TaskRow({ t, onToggle, onSaved }) {
         <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Deadline</div>
         <div className="text-xs font-medium text-slate-600 dark:text-slate-300">{t.planned_date ? fmtDate(t.planned_date) : "—"}</div>
       </div>
-      <input className="input w-40 py-1.5 text-xs" value={ns} placeholder="Next step" onChange={(ev) => setNs(ev.target.value)} onBlur={saveNs} />
-      <input className="input w-36 py-1.5 text-xs" type="date" value={nsd} onChange={(ev) => setNsd(ev.target.value)} onBlur={saveNs} />
-      <Badge meta={m} />
+      <div className="w-28 shrink-0"><Badge meta={m} /></div>
+      <input className="input w-48 py-1.5 text-xs" value={ns} placeholder="Next step" onChange={(ev) => setNs(ev.target.value)} onBlur={saveNs} />
+      <input className="input w-40 py-1.5 text-xs" type="date" value={nsd} onChange={(ev) => setNsd(ev.target.value)} onBlur={saveNs} />
     </div>
   );
 }
