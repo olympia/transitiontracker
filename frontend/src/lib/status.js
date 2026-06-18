@@ -66,7 +66,7 @@ export const OVERALL_META = {
     dot: "bg-blue-500",
   },
   none: {
-    label: "No go-live",
+    label: "Not Scheduled",
     soft: "bg-slate-100 text-slate-500 ring-slate-400/20 dark:bg-slate-800 dark:text-slate-400",
     dot: "bg-slate-400",
   },

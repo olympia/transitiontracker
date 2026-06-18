@@ -83,6 +83,9 @@ class Entity(Base):
     next_step_due: Mapped[Date | None] = mapped_column(Date, nullable=True)
     on_hold: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str] = mapped_column(Text, default="")
+    contact_name: Mapped[str] = mapped_column(String(200), default="")
+    contact_phone: Mapped[str] = mapped_column(String(100), default="")
+    contact_email: Mapped[str] = mapped_column(String(200), default="")
 
     project: Mapped["Project"] = relationship(back_populates="entities")
     instances: Mapped[list["TaskInstance"]] = relationship(
@@ -113,6 +116,8 @@ class TaskInstance(Base):
     done: Mapped[bool] = mapped_column(Boolean, default=False)
     actual_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     comment: Mapped[str] = mapped_column(String(500), default="")
+    next_step: Mapped[str] = mapped_column(String(500), default="")
+    next_step_due: Mapped[Date | None] = mapped_column(Date, nullable=True)
 
     entity: Mapped["Entity"] = relationship(back_populates="instances")
     task_definition: Mapped["TaskDefinition"] = relationship(back_populates="instances")

@@ -79,6 +79,11 @@ def _run_migrations() -> None:
         "ADD COLUMN IF NOT EXISTS is_golive TINYINT(1) NOT NULL DEFAULT 0",
         "ALTER TABLE entities "
         "ADD COLUMN IF NOT EXISTS next_step_due DATE NULL",
+        "ALTER TABLE entities ADD COLUMN IF NOT EXISTS contact_name VARCHAR(200) NOT NULL DEFAULT ''",
+        "ALTER TABLE entities ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(100) NOT NULL DEFAULT ''",
+        "ALTER TABLE entities ADD COLUMN IF NOT EXISTS contact_email VARCHAR(200) NOT NULL DEFAULT ''",
+        "ALTER TABLE task_instances ADD COLUMN IF NOT EXISTS next_step VARCHAR(500) NOT NULL DEFAULT ''",
+        "ALTER TABLE task_instances ADD COLUMN IF NOT EXISTS next_step_due DATE NULL",
     ]
     with engine.connect() as conn:
         for stmt in statements:

@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Search, LayoutGrid, RefreshCw, CalendarClock, Upload,
-  ZoomIn, ZoomOut, Maximize2, ChevronDown, Filter, StickyNote, Footprints,
+  ZoomIn, ZoomOut, Maximize2, ChevronDown, Filter, StickyNote,
 } from "lucide-react";
 import { api } from "../api";
 import { Badge, EmptyState, Spinner, Modal, Field } from "../components/ui.jsx";
@@ -11,16 +11,15 @@ import EntityDrawer from "./EntityDrawer.jsx";
 
 const FILTERS = [
   { id: "all", label: "All" }, { id: "delayed", label: "Overdue" }, { id: "duesoon", label: "Due soon" },
-  { id: "ontrack", label: "On track" }, { id: "completed", label: "Completed" }, { id: "onhold", label: "On hold" }, { id: "none", label: "No go-live" },
+  { id: "ontrack", label: "On track" }, { id: "completed", label: "Completed" }, { id: "onhold", label: "On hold" }, { id: "none", label: "Not Scheduled" },
 ];
 const TASK_FILTER_OPTIONS = [
   { v: "", l: "Any status" }, { v: "done", l: "Completed" }, { v: "overdue", l: "Overdue" },
   { v: "duesoon", l: "Due soon" }, { v: "future", l: "Scheduled" }, { v: "onhold", l: "On hold" }, { v: "none", l: "Not set" },
 ];
 const GOLIVE_FILTER_OPTIONS = [{ v: "all", l: "All" }, { v: "has", l: "Has date" }, { v: "none", l: "No date" }];
-const W_RACK = 240, W_GOLIVE = 104, W_STATUS = 132, MIN_CELL = 12, MAX_CELL = 44;
+const W_RACK = 240, W_GOLIVE = 104, W_STATUS = 132, W_NEXT = 96, MIN_CELL = 12, MAX_CELL = 44;
 function lsBool(key, def) { const v = localStorage.getItem(key); return v === null ? def : v === "1"; }
-function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 export default function Dashboard({ project }) {
   const [data, setData] = useState(null);
@@ -29,8 +28,8 @@ export default function Dashboard({ project }) {
   const [filter, setFilter] = useState("all");
   const [goliveFilter, setGoliveFilter] = useState("all");
   const [taskFilters, setTaskFilters] = useState({});
-  const [open, setOpen] = useState(null); // { id, tab, taskDefId }
-  const [confirm, setConfirm] = useState(null); // { instanceId, done, name }
+  const [open, setOpen] = useState(null);
+  const [confirm, setConfirm] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [entityStatsOpen, setEntityStatsOpen] = useState(() => lsBool("tt-stats-entity", true));
@@ -48,7 +47,7 @@ export default function Dashboard({ project }) {
     const el = wrapRef.current; if (!el) return;
     const measure = () => {
       const isMd = window.matchMedia("(min-width: 768px)").matches;
-      const sticky = isMd ? W_RACK + W_GOLIVE + W_STATUS : W_RACK;
+      const sticky = isMd ? W_RACK + W_GOLIVE + W_STATUS + W_NEXT : W_RACK;
       setAutoFit(Math.max(MIN_CELL, Math.min(MAX_CELL, Math.floor((el.clientWidth - sticky - 6) / nTasks))));
     };
     measure(); const ro = new ResizeObserver(measure); ro.observe(el); return () => ro.disconnect();
@@ -61,11 +60,7 @@ export default function Dashboard({ project }) {
   function setTaskFilter(id, val) { setTaskFilters((cur) => { const next = { ...cur }; if (!val) delete next[id]; else next[id] = val; return next; }); }
 
   function askToggle(cell, name) { setConfirm({ instanceId: cell.instance_id, done: cell.status === "done", name }); }
-  async function applyToggle() {
-    const c = confirm; setConfirm(null);
-    await api.updateInstance(c.instanceId, { done: !c.done, clear_actual: c.done });
-    await load();
-  }
+  async function applyToggle() { const c = confirm; setConfirm(null); await api.updateInstance(c.instanceId, { done: !c.done, clear_actual: c.done }); await load(); }
 
   const stats = useMemo(() => {
     const s = { total: 0, completed: 0, ontrack: 0, duesoon: 0, delayed: 0, onhold: 0, none: 0 };
@@ -177,17 +172,8 @@ function StatSection({ title, open, onToggle, children }) {
   );
 }
 
-function nextStepFlag(r) {
-  if (!r.next_step) return null;
-  if (!r.next_step_due) return { color: "text-slate-400", title: r.next_step };
-  const due = new Date(r.next_step_due + "T00:00:00");
-  const today = new Date(todayStr() + "T00:00:00");
-  const overdue = due < today;
-  return { color: overdue ? "text-rose-500" : "text-emerald-500", title: `${r.next_step} (due ${fmtDate(r.next_step_due)})` };
-}
-
 function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter, taskFilters, setTaskFilter, onOpen, onToggleTask }) {
-  const square = Math.max(6, Math.min(cellPx - 12, 13));
+  const square = Math.max(5, Math.min(cellPx - 14, 9));
   const [popover, setPopover] = useState(null);
   function openGoliveFilter(ev) { ev.stopPropagation(); const r = ev.currentTarget.getBoundingClientRect(); setPopover({ kind: "golive", x: r.left, y: r.bottom + 4, options: GOLIVE_FILTER_OPTIONS, current: goliveFilter }); }
   function openTaskFilter(ev, id) { ev.stopPropagation(); const r = ev.currentTarget.getBoundingClientRect(); setPopover({ kind: "task", id, x: r.left, y: r.bottom + 4, options: TASK_FILTER_OPTIONS, current: taskFilters[id] || "" }); }
@@ -207,13 +193,14 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
                 <button onClick={openGoliveFilter} className={`flex items-center gap-1 text-xs font-bold uppercase tracking-wide ${goliveFilter !== "all" ? "text-brand-600" : "text-slate-500 hover:text-slate-700"}`}>Go-live <Filter size={11} /></button>
               </th>
               <th {...cornerStyle(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell")}><span className="text-xs font-bold uppercase tracking-wide text-slate-500">Status</span></th>
+              <th {...cornerStyle(W_RACK + W_GOLIVE + W_STATUS, W_NEXT, "hidden md:table-cell")}><span className="text-xs font-bold uppercase tracking-wide text-slate-500" title="Next steps whose due date has arrived or passed">Next due</span></th>
               {defs.map((d) => {
                 const active = !!taskFilters[d.id];
                 return (
                   <th key={d.id} className="sticky top-0 z-20 h-40 bg-slate-50/95 align-bottom backdrop-blur dark:bg-slate-900/95" style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}>
                     <button onClick={(ev) => openTaskFilter(ev, d.id)} className="relative flex h-36 w-full items-end justify-center pb-2" title={`${d.name}${d.responsible ? " — " + d.responsible : ""} (click to filter)`}>
                       {active && <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-brand-600" />}
-                      <span className={`font-semibold ${active ? "text-brand-600" : "text-slate-600 dark:text-slate-300"}`}
+                      <span className={`font-normal ${active ? "text-brand-600" : "text-slate-600 dark:text-slate-300"}`}
                         style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", maxHeight: "8.5rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: cellPx < 20 ? "10px" : "12px" }}>{d.name}</span>
                     </button>
                   </th>
@@ -224,19 +211,24 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
           <tbody>
             {rows.map((r) => {
               const om = OVERALL_META[r.overall] || OVERALL_META.none;
-              const nsf = nextStepFlag(r);
               return (
                 <tr key={r.entity_id} className="group">
                   <td {...stickyBody(0, W_RACK, "px-4")}>
                     <div className="flex items-center gap-1.5">
                       <button className="truncate text-left text-sm font-semibold hover:text-brand-600" onClick={() => onOpen(r.entity_id, "tasks")} title="Open">{r.code || "—"}</button>
                       {r.has_notes && <button onClick={() => onOpen(r.entity_id, "notes")} title="Notes"><StickyNote size={13} className="shrink-0 text-amber-500" /></button>}
-                      {nsf && <button onClick={() => onOpen(r.entity_id, "nextstep")} title={nsf.title}><Footprints size={13} className={`shrink-0 ${nsf.color}`} /></button>}
                     </div>
                     <button className="block truncate text-left text-xs text-slate-400 hover:text-brand-600" onClick={() => onOpen(r.entity_id, "tasks")}>{r.name || r.location}</button>
                   </td>
                   <td {...stickyBody(W_RACK, W_GOLIVE, "hidden md:table-cell cursor-pointer")} onClick={() => onOpen(r.entity_id, "tasks")}><span className="whitespace-nowrap text-xs text-slate-500">{r.golive_date ? fmtDate(r.golive_date) : "—"}</span></td>
                   <td {...stickyBody(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell cursor-pointer")} onClick={() => onOpen(r.entity_id, "tasks")}><Badge meta={om} /></td>
+                  <td {...stickyBody(W_RACK + W_GOLIVE + W_STATUS, W_NEXT, "hidden md:table-cell cursor-pointer")} onClick={() => onOpen(r.entity_id, "tasks")}>
+                    {r.next_steps_due > 0 ? (
+                      <span className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-600 ring-1 ring-inset ring-rose-600/20 dark:bg-rose-500/15 dark:text-rose-300">{r.next_steps_due}</span>
+                    ) : (
+                      <span className="text-xs text-slate-300 dark:text-slate-600">0</span>
+                    )}
+                  </td>
                   {r.cells.map((c) => {
                     const m = STATUS_META[c.status] || STATUS_META.none;
                     const name = defs.find((d) => d.id === c.task_def_id)?.name || "";
@@ -275,7 +267,7 @@ function Legend() {
   const items = ["done", "overdue", "duesoon", "future", "onhold", "none"];
   return (
     <div className="flex flex-wrap items-center gap-4 px-1 text-xs text-slate-500">
-      {items.map((k) => (<div key={k} className="flex items-center gap-1.5"><span className={`h-3.5 w-3.5 rounded ${STATUS_META[k].cell} ring-1 ring-inset ring-black/10 dark:ring-white/10`} />{STATUS_META[k].label}</div>))}
+      {items.map((k) => (<div key={k} className="flex items-center gap-1.5"><span className={`h-3.5 w-3.5 rounded-full ${STATUS_META[k].cell} ring-1 ring-inset ring-black/10 dark:ring-white/10`} />{STATUS_META[k].label}</div>))}
     </div>
   );
 }

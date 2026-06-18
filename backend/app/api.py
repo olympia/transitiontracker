@@ -1,4 +1,6 @@
 """REST API routes."""
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -270,6 +272,8 @@ def _entity_detail(db: Session, entity: models.Entity) -> schemas.EntityDetail:
                 actual_date=st["actual_date"],
                 done=st["done"],
                 comment=inst.comment,
+                next_step=inst.next_step,
+                next_step_due=inst.next_step_due,
             )
         )
     overall = status_logic.overall_status(
@@ -299,13 +303,10 @@ def update_entity(
     entity = _get_entity(db, entity_id)
     data = payload.model_dump(exclude_unset=True)
     clear = data.pop("clear_golive", False)
-    clear_nsd = data.pop("clear_next_step_due", False)
     for k, v in data.items():
         setattr(entity, k, v)
     if clear:
         entity.golive_date = None
-    if clear_nsd:
-        entity.next_step_due = None
     db.flush()
     detail = _entity_detail(db, entity)
     db.commit()
@@ -334,10 +335,13 @@ def update_instance(
         raise HTTPException(404, "Task instance not found")
     data = payload.model_dump(exclude_unset=True)
     clear = data.pop("clear_actual", False)
+    clear_nsd = data.pop("clear_next_step_due", False)
     for k, v in data.items():
         setattr(obj, k, v)
     if clear:
         obj.actual_date = None
+    if clear_nsd:
+        obj.next_step_due = None
     db.commit()
     db.refresh(obj)
     return obj
@@ -412,6 +416,7 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
         .all()
     )
     rows = []
+    today = date.today()
     for e in entities:
         inst_by_def = {i.task_def_id: i for i in e.instances}
         cells = []
@@ -447,6 +452,11 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
                 )
             )
         overall = status_logic.overall_status(e.on_hold, e.golive_date, cell_statuses)
+        next_steps_due = sum(
+            1
+            for i in e.instances
+            if i.next_step and i.next_step_due and i.next_step_due <= today
+        )
         rows.append(
             schemas.MatrixRow(
                 entity_id=e.id,
@@ -454,9 +464,8 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
                 name=e.name,
                 location=e.location,
                 golive_date=e.golive_date,
-                next_step=e.next_step,
-                next_step_due=e.next_step_due,
                 has_notes=bool(e.notes and e.notes.strip()),
+                next_steps_due=next_steps_due,
                 on_hold=e.on_hold,
                 overall=overall,
                 overdue_count=overdue_count,

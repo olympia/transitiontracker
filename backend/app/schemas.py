@@ -85,6 +85,9 @@ class TaskInstanceUpdate(BaseModel):
     actual_date: date | None = None
     comment: str | None = None
     clear_actual: bool = False  # explicitly clear the date
+    next_step: str | None = None
+    next_step_due: date | None = None
+    clear_next_step_due: bool = False
 
 
 class TaskInstanceOut(BaseModel):
@@ -103,10 +106,11 @@ class EntityBase(BaseModel):
     name: str = ""
     location: str = ""
     golive_date: date | None = None
-    next_step: str = ""
-    next_step_due: date | None = None
     on_hold: bool = False
     notes: str = ""
+    contact_name: str = ""
+    contact_phone: str = ""
+    contact_email: str = ""
     position: int = 0
 
 
@@ -120,11 +124,11 @@ class EntityUpdate(BaseModel):
     location: str | None = None
     golive_date: date | None = None
     clear_golive: bool = False
-    next_step: str | None = None
-    next_step_due: date | None = None
-    clear_next_step_due: bool = False
     on_hold: bool | None = None
     notes: str | None = None
+    contact_name: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
     position: int | None = None
 
 
@@ -145,6 +149,8 @@ class TaskCellDetail(BaseModel):
     actual_date: str | None
     done: bool
     comment: str
+    next_step: str
+    next_step_due: date | None
 
 
 class EntityDetail(EntityOut):
@@ -168,9 +174,8 @@ class MatrixRow(BaseModel):
     name: str
     location: str
     golive_date: date | None
-    next_step: str
-    next_step_due: date | None
     has_notes: bool
+    next_steps_due: int
     on_hold: bool
     overall: str
     overdue_count: int

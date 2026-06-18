@@ -7,7 +7,6 @@ import {
   MapPin,
   Server,
   StickyNote,
-  Footprints,
   Save,
 } from "lucide-react";
 import { api } from "../api";
@@ -41,11 +40,11 @@ export default function EntityDrawer({ entityId, initialTab, onClose, onSaved })
         code: m.code,
         name: m.name,
         location: m.location,
-        next_step: m.next_step,
-        next_step_due: m.next_step_due || null,
-        clear_next_step_due: !m.next_step_due,
         on_hold: m.on_hold,
         notes: m.notes,
+        contact_name: m.contact_name,
+        contact_phone: m.contact_phone,
+        contact_email: m.contact_email,
         golive_date: m.golive_date || null,
         clear_golive: !m.golive_date,
       };
@@ -76,7 +75,7 @@ export default function EntityDrawer({ entityId, initialTab, onClose, onSaved })
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm">
       <div
-        className="h-full w-full max-w-2xl overflow-y-auto bg-slate-50 shadow-2xl dark:bg-slate-950"
+        className="h-full w-full max-w-4xl overflow-y-auto bg-slate-50 shadow-2xl dark:bg-slate-950"
         onClick={(ev) => ev.stopPropagation()}
       >
         {/* header */}
@@ -132,7 +131,6 @@ export default function EntityDrawer({ entityId, initialTab, onClose, onSaved })
           <div className="mt-4 flex gap-1">
             {[
               { id: "tasks", label: "Tasks", icon: Check },
-              { id: "nextstep", label: "Next step", icon: Footprints },
               { id: "details", label: "Details", icon: MapPin },
               { id: "inventory", label: "Inventory", icon: Server },
               { id: "notes", label: "Notes", icon: StickyNote },
@@ -159,8 +157,7 @@ export default function EntityDrawer({ entityId, initialTab, onClose, onSaved })
           <Spinner />
         ) : (
           <div className="p-6">
-            {tab === "tasks" && <TasksTab e={e} onToggle={toggleTask} />}
-            {tab === "nextstep" && <NextStepTab e={e} patch={patch} />}
+            {tab === "tasks" && <TasksTab e={e} onToggle={toggleTask} reload={load} onSaved={onSaved} />}
             {tab === "details" && <DetailsTab e={e} patch={patch} />}
             {tab === "inventory" && (
               <InventoryTab e={e} reload={load} onSaved={onSaved} />
@@ -186,19 +183,9 @@ export default function EntityDrawer({ entityId, initialTab, onClose, onSaved })
   );
 }
 
-function TasksTab({ e, onToggle, focusId }) {
+function TasksTab({ e, onToggle, reload, onSaved }) {
   const done = e.tasks.filter((t) => t.done).length;
   const pct = e.tasks.length ? Math.round((done / e.tasks.length) * 100) : 0;
-  const refs = useRef({});
-  const [highlight, setHighlight] = useState(null);
-  useEffect(() => {
-    if (focusId && refs.current[focusId]) {
-      refs.current[focusId].scrollIntoView({ behavior: "smooth", block: "center" });
-      setHighlight(focusId);
-      const t = setTimeout(() => setHighlight(null), 2400);
-      return () => clearTimeout(t);
-    }
-  }, [focusId, e.tasks.length]);
   return (
     <div className="space-y-4">
       {!e.golive_date && (
@@ -227,48 +214,52 @@ function TasksTab({ e, onToggle, focusId }) {
             No tasks defined. Add them in the Task template tab.
           </div>
         )}
-        {e.tasks.map((t) => {
-          const m = STATUS_META[t.status] || STATUS_META.none;
-          const isFocus = highlight === t.task_def_id;
-          return (
-            <div
-              key={t.task_def_id}
-              ref={(el) => (refs.current[t.task_def_id] = el)}
-              className={`flex items-center gap-3 px-4 py-3 transition ${
-                isFocus
-                  ? "bg-brand-50 ring-2 ring-inset ring-brand-500/40 dark:bg-brand-500/10"
-                  : ""
-              }`}
-            >
-              <button
-                onClick={() => onToggle(t)}
-                className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border transition ${
-                  t.done
-                    ? "border-emerald-500 bg-emerald-500 text-white"
-                    : "border-slate-300 hover:border-brand-500 dark:border-slate-600"
-                }`}
-              >
-                {t.done && <Check size={15} />}
-              </button>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{t.name}</div>
-                {t.responsible && (
-                  <div className="truncate text-xs text-slate-400">{t.responsible}</div>
-                )}
-              </div>
-              <div className="w-28 shrink-0 text-right">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  Deadline
-                </div>
-                <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  {t.planned_date ? fmtDate(t.planned_date) : "—"}
-                </div>
-              </div>
-              <Badge meta={m} />
-            </div>
-          );
-        })}
+        {e.tasks.map((t) => (
+          <TaskRow key={t.task_def_id} t={t} onToggle={onToggle} onSaved={onSaved} />
+        ))}
       </div>
+    </div>
+  );
+}
+
+function TaskRow({ t, onToggle, onSaved }) {
+  const m = STATUS_META[t.status] || STATUS_META.none;
+  const [ns, setNs] = useState(t.next_step || "");
+  const [nsd, setNsd] = useState(t.next_step_due || "");
+  useEffect(() => {
+    setNs(t.next_step || "");
+    setNsd(t.next_step_due || "");
+  }, [t.next_step, t.next_step_due]);
+  async function saveNs() {
+    if ((ns || "") === (t.next_step || "") && (nsd || "") === (t.next_step_due || "")) return;
+    await api.updateInstance(t.instance_id, {
+      next_step: ns,
+      next_step_due: nsd || null,
+      clear_next_step_due: !nsd,
+    });
+    onSaved?.();
+  }
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <button
+        onClick={() => onToggle(t)}
+        className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border transition ${
+          t.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 hover:border-brand-500 dark:border-slate-600"
+        }`}
+      >
+        {t.done && <Check size={15} />}
+      </button>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{t.name}</div>
+        {t.responsible && <div className="truncate text-xs text-slate-400">{t.responsible}</div>}
+      </div>
+      <div className="w-20 shrink-0 text-right">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Deadline</div>
+        <div className="text-xs font-medium text-slate-600 dark:text-slate-300">{t.planned_date ? fmtDate(t.planned_date) : "—"}</div>
+      </div>
+      <input className="input w-40 py-1.5 text-xs" value={ns} placeholder="Next step" onChange={(ev) => setNs(ev.target.value)} onBlur={saveNs} />
+      <input className="input w-36 py-1.5 text-xs" type="date" value={nsd} onChange={(ev) => setNsd(ev.target.value)} onBlur={saveNs} />
+      <Badge meta={m} />
     </div>
   );
 }
@@ -312,6 +303,20 @@ function DetailsTab({ e, patch }) {
           onChange={(ev) => patch({ location: ev.target.value })}
         />
       </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Contact name</label>
+          <input className="input" value={e.contact_name || ""} onChange={(ev) => patch({ contact_name: ev.target.value })} />
+        </div>
+        <div>
+          <label className="label">Phone</label>
+          <input className="input" value={e.contact_phone || ""} placeholder="+36 ..." onChange={(ev) => patch({ contact_phone: ev.target.value })} />
+        </div>
+      </div>
+      <div>
+        <label className="label">Email</label>
+        <input className="input" type="email" value={e.contact_email || ""} placeholder="name@example.com" onChange={(ev) => patch({ contact_email: ev.target.value })} />
+      </div>
       <div className="card flex items-center justify-between px-4 py-3">
         <div>
           <div className="text-sm font-semibold">On hold</div>
@@ -327,52 +332,6 @@ function DetailsTab({ e, patch }) {
       <p className="text-xs text-slate-400">
         Changes are applied when you press Save in the header.
       </p>
-    </div>
-  );
-}
-
-function NextStepTab({ e, patch }) {
-  const due = e.next_step_due ? new Date(e.next_step_due + "T00:00:00") : null;
-  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00");
-  const overdue = due && due < today;
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="label">Next step</label>
-        <input
-          className="input"
-          value={e.next_step || ""}
-          placeholder='e.g. "Waiting for cabling access"'
-          onChange={(ev) => patch({ next_step: ev.target.value })}
-        />
-      </div>
-      <div>
-        <label className="label">Next step due</label>
-        <input
-          className="input"
-          type="date"
-          value={e.next_step_due || ""}
-          onChange={(ev) => patch({ next_step_due: ev.target.value })}
-        />
-      </div>
-      {e.next_step && (
-        <div
-          className={`rounded-xl px-4 py-3 text-sm ring-1 ring-inset ${
-            !e.next_step_due
-              ? "bg-slate-100 text-slate-500 ring-slate-300/30 dark:bg-slate-800 dark:text-slate-400"
-              : overdue
-              ? "bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-300"
-              : "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300"
-          }`}
-        >
-          {!e.next_step_due
-            ? "No due date set — the matrix flag shows grey."
-            : overdue
-            ? `Overdue since ${fmtDate(e.next_step_due)} — the matrix flag shows red.`
-            : `Due ${fmtDate(e.next_step_due)} — the matrix flag shows green.`}
-        </div>
-      )}
-      <p className="text-xs text-slate-400">Changes are applied when you press Save in the header.</p>
     </div>
   );
 }
