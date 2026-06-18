@@ -18,7 +18,7 @@ const TASK_FILTER_OPTIONS = [
   { v: "duesoon", l: "Due soon" }, { v: "future", l: "Scheduled" }, { v: "onhold", l: "On hold" }, { v: "none", l: "Not set" },
 ];
 const GOLIVE_FILTER_OPTIONS = [{ v: "all", l: "All" }, { v: "has", l: "Has date" }, { v: "none", l: "No date" }];
-const W_RACK = 184, W_GOLIVE = 104, W_STATUS = 132, MIN_CELL = 12, MAX_CELL = 44;
+const W_RACK = 240, W_GOLIVE = 104, W_STATUS = 132, MIN_CELL = 12, MAX_CELL = 44;
 function lsBool(key, def) { const v = localStorage.getItem(key); return v === null ? def : v === "1"; }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
@@ -187,7 +187,7 @@ function nextStepFlag(r) {
 }
 
 function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter, taskFilters, setTaskFilter, onOpen, onToggleTask }) {
-  const square = Math.max(8, Math.min(cellPx - 8, 26));
+  const square = Math.max(6, Math.min(cellPx - 12, 13));
   const [popover, setPopover] = useState(null);
   function openGoliveFilter(ev) { ev.stopPropagation(); const r = ev.currentTarget.getBoundingClientRect(); setPopover({ kind: "golive", x: r.left, y: r.bottom + 4, options: GOLIVE_FILTER_OPTIONS, current: goliveFilter }); }
   function openTaskFilter(ev, id) { ev.stopPropagation(); const r = ev.currentTarget.getBoundingClientRect(); setPopover({ kind: "task", id, x: r.left, y: r.bottom + 4, options: TASK_FILTER_OPTIONS, current: taskFilters[id] || "" }); }
@@ -244,7 +244,7 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
                     return (
                       <td key={c.task_def_id} onClick={() => onToggleTask(c, name)}
                         className="cursor-pointer border-t border-slate-100 py-1.5 text-center dark:border-slate-800" style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}>
-                        <div title={tip} className={`mx-auto rounded ring-1 ring-inset ring-black/5 transition hover:scale-125 dark:ring-white/5 ${m.cell}`} style={{ width: square, height: square }} />
+                        <div title={tip} className={`mx-auto rounded-full ring-1 ring-inset ring-black/5 transition hover:scale-150 dark:ring-white/5 ${m.cell}`} style={{ width: square, height: square }} />
                       </td>
                     );
                   })}
