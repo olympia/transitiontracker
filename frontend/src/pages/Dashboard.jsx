@@ -174,6 +174,7 @@ function StatSection({ title, open, onToggle, children }) {
 
 function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter, taskFilters, setTaskFilter, onOpen, onToggleTask }) {
   const square = Math.max(5, Math.min(cellPx - 14, 9));
+  const goliveId = defs.find((d) => d.is_golive)?.id;
   const [popover, setPopover] = useState(null);
   function openGoliveFilter(ev) { ev.stopPropagation(); const r = ev.currentTarget.getBoundingClientRect(); setPopover({ kind: "golive", x: r.left, y: r.bottom + 4, options: GOLIVE_FILTER_OPTIONS, current: goliveFilter }); }
   function openTaskFilter(ev, id) { ev.stopPropagation(); const r = ev.currentTarget.getBoundingClientRect(); setPopover({ kind: "task", id, x: r.left, y: r.bottom + 4, options: TASK_FILTER_OPTIONS, current: taskFilters[id] || "" }); }
@@ -197,7 +198,7 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
               {defs.map((d) => {
                 const active = !!taskFilters[d.id];
                 return (
-                  <th key={d.id} className="sticky top-0 z-20 h-40 bg-slate-50/95 align-bottom backdrop-blur dark:bg-slate-900/95" style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}>
+                  <th key={d.id} className={`sticky top-0 z-20 h-40 align-bottom backdrop-blur ${d.is_golive ? "bg-emerald-50/95 dark:bg-emerald-500/10" : "bg-slate-50/95 dark:bg-slate-900/95"}`} style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}>
                     <button onClick={(ev) => openTaskFilter(ev, d.id)} className="relative flex h-36 w-full items-end justify-center pb-2" title={`${d.name}${d.responsible ? " — " + d.responsible : ""} (click to filter)`}>
                       {active && <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-brand-600" />}
                       <span className={`font-normal ${active ? "text-brand-600" : "text-slate-600 dark:text-slate-300"}`}
@@ -235,7 +236,7 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
                     const tip = `${name}\n${m.label}` + (c.planned_date ? `\nDeadline: ${c.planned_date}` : "") + "\n(click to mark)";
                     return (
                       <td key={c.task_def_id} onClick={() => onToggleTask(c, name)}
-                        className="cursor-pointer border-t border-slate-100 py-1.5 text-center dark:border-slate-800" style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}>
+                        className={`cursor-pointer border-t border-slate-100 py-1.5 text-center dark:border-slate-800 ${c.task_def_id === goliveId ? "bg-emerald-50/60 dark:bg-emerald-500/[0.07]" : ""}`} style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}>
                         <div title={tip} className={`mx-auto rounded-full ring-1 ring-inset ring-black/5 transition hover:scale-150 dark:ring-white/5 ${m.cell}`} style={{ width: square, height: square }} />
                       </td>
                     );
