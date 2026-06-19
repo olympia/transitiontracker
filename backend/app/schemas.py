@@ -195,20 +195,47 @@ class MatrixOut(BaseModel):
 
 
 # ============================================================ financial tracker
+# ---------- WBS category (defined at project setup) ----------
+class WbsCategoryBase(BaseModel):
+    name: str = ""
+    position: int = 0
+
+
+class WbsCategoryCreate(WbsCategoryBase):
+    pass
+
+
+class WbsCategoryUpdate(BaseModel):
+    name: str | None = None
+    position: int | None = None
+
+
+class WbsCategoryOut(WbsCategoryBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int
+
+
+# ---------- Budget month ----------
+class BudgetMonthOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    item_id: int
+    month: int
+    budget_value: float
+    realized_value: float
+
+
+class BudgetMonthUpdate(BaseModel):
+    budget_value: float | None = None
+    realized_value: float | None = None
+
+
 # ---------- Budget item ----------
 class BudgetItemBase(BaseModel):
     name: str = ""
-    responsible: str = ""
     item_type: str = "fixed"  # fixed | manday
-    budget_amount: float = 0.0
-    actual_amount: float = 0.0
-    forecast_amount: float = 0.0
-    budget_manday: float = 0.0
-    budget_rate: float = 0.0
-    actual_manday: float = 0.0
-    actual_rate: float = 0.0
-    forecast_manday: float = 0.0
-    forecast_rate: float = 0.0
+    daily_rate: float = 0.0
     position: int = 0
 
 
@@ -218,17 +245,8 @@ class BudgetItemCreate(BudgetItemBase):
 
 class BudgetItemUpdate(BaseModel):
     name: str | None = None
-    responsible: str | None = None
     item_type: str | None = None
-    budget_amount: float | None = None
-    actual_amount: float | None = None
-    forecast_amount: float | None = None
-    budget_manday: float | None = None
-    budget_rate: float | None = None
-    actual_manday: float | None = None
-    actual_rate: float | None = None
-    forecast_manday: float | None = None
-    forecast_rate: float | None = None
+    daily_rate: float | None = None
     position: int | None = None
 
 
@@ -236,6 +254,10 @@ class BudgetItemOut(BudgetItemBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     leg_id: int
+
+
+class BudgetItemFull(BudgetItemOut):
+    months: list[BudgetMonthOut]
 
 
 # ---------- Change request ----------
@@ -288,11 +310,17 @@ class WbsLegOut(WbsLegBase):
     year_id: int
 
 
+class WbsLegFull(WbsLegOut):
+    items: list[BudgetItemFull]
+    change_requests: list[ChangeRequestOut]
+
+
 # ---------- Financial year ----------
 class FinancialYearBase(BaseModel):
     year: int
     rate_1: float = 0.0
     rate_2: float = 0.0
+    forecast_from_month: int = 1
 
 
 class FinancialYearCreate(FinancialYearBase):
@@ -303,6 +331,7 @@ class FinancialYearUpdate(BaseModel):
     year: int | None = None
     rate_1: float | None = None
     rate_2: float | None = None
+    forecast_from_month: int | None = None
 
 
 class FinancialYearOut(FinancialYearBase):
@@ -311,70 +340,8 @@ class FinancialYearOut(FinancialYearBase):
     project_id: int
 
 
-# ---------- Computed finance view ----------
-class Money(BaseModel):
-    """An amount expressed in base + reporting currencies."""
-    base: float
-    rep1: float | None = None
-    rep2: float | None = None
-
-
-class BudgetItemComputed(BaseModel):
-    id: int
-    name: str
-    responsible: str
-    item_type: str
-    position: int
-    # raw inputs (echoed for the editor)
-    budget_amount: float
-    actual_amount: float
-    forecast_amount: float
-    budget_manday: float
-    budget_rate: float
-    actual_manday: float
-    actual_rate: float
-    forecast_manday: float
-    forecast_rate: float
-    # computed totals (base currency)
-    budget: Money
-    actual: Money
-    forecast: Money
-    total: Money  # actual + forecast
-
-
-class ChangeRequestComputed(BaseModel):
-    id: int
-    kind: str
-    label: str
-    position: int
-    amount: Money
-
-
-class WbsLegComputed(BaseModel):
-    id: int
-    code: str
-    name: str
-    category: str
-    position: int
-    items: list[BudgetItemComputed]
-    change_requests: list[ChangeRequestComputed]
-    # leg totals
-    budget_total: Money
-    actual_total: Money
-    forecast_total: Money
-    total: Money  # actual + forecast
-    cr_total: Money
-    total_with_crs: Money  # budget_total + cr_total
-
-
-class FinanceYearView(BaseModel):
+# ---------- Raw nested view (aggregates computed client-side) ----------
+class FinanceYearData(BaseModel):
     project: ProjectOut
     year: FinancialYearOut
-    legs: list[WbsLegComputed]
-    # year-level grand totals
-    budget_total: Money
-    actual_total: Money
-    forecast_total: Money
-    total: Money
-    cr_total: Money
-    total_with_crs: Money
+    legs: list[WbsLegFull]

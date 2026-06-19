@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app import finance, imports, models, schemas, status as status_logic
+from app import imports, models, schemas, status as status_logic
 from app.database import get_db
 
 router = APIRouter(prefix="/api")
@@ -675,6 +675,10 @@ def create_item(
         )
     obj = models.BudgetItem(leg_id=leg_id, **data)
     db.add(obj)
+    db.flush()
+    # seed the 12 month rows so the editor always has a full year
+    for m in range(1, 13):
+        db.add(models.BudgetMonth(item_id=obj.id, month=m))
     db.commit()
     db.refresh(obj)
     return obj
@@ -759,11 +763,138 @@ def delete_cr(cr_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------- budget months
+@router.put("/budget-months/{month_id}", response_model=schemas.BudgetMonthOut)
+def update_month(
+    month_id: int,
+    payload: schemas.BudgetMonthUpdate,
+    db: Session = Depends(get_db),
+):
+    obj = db.get(models.BudgetMonth, month_id)
+    if not obj:
+        raise HTTPException(404, "Budget month not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+# ---------------------------------------------------------------- wbs categories
+@router.get(
+    "/projects/{project_id}/wbs-categories",
+    response_model=list[schemas.WbsCategoryOut],
+)
+def list_categories(project_id: int, db: Session = Depends(get_db)):
+    _get_project(db, project_id)
+    return (
+        db.query(models.WbsCategory)
+        .filter(models.WbsCategory.project_id == project_id)
+        .order_by(models.WbsCategory.position, models.WbsCategory.id)
+        .all()
+    )
+
+
+@router.post(
+    "/projects/{project_id}/wbs-categories",
+    response_model=schemas.WbsCategoryOut,
+)
+def create_category(
+    project_id: int,
+    payload: schemas.WbsCategoryCreate,
+    db: Session = Depends(get_db),
+):
+    _get_project(db, project_id)
+    data = payload.model_dump()
+    if not data.get("position"):
+        data["position"] = (
+            db.query(models.WbsCategory)
+            .filter(models.WbsCategory.project_id == project_id)
+            .count()
+        )
+    obj = models.WbsCategory(project_id=project_id, **data)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put("/wbs-categories/{cat_id}", response_model=schemas.WbsCategoryOut)
+def update_category(
+    cat_id: int,
+    payload: schemas.WbsCategoryUpdate,
+    db: Session = Depends(get_db),
+):
+    obj = db.get(models.WbsCategory, cat_id)
+    if not obj:
+        raise HTTPException(404, "Category not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.delete("/wbs-categories/{cat_id}")
+def delete_category(cat_id: int, db: Session = Depends(get_db)):
+    obj = db.get(models.WbsCategory, cat_id)
+    if not obj:
+        raise HTTPException(404, "Category not found")
+    db.delete(obj)
+    db.commit()
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------- finance view
 @router.get(
-    "/financial-years/{year_id}/view", response_model=schemas.FinanceYearView
+    "/financial-years/{year_id}/view", response_model=schemas.FinanceYearData
 )
 def get_finance_view(year_id: int, db: Session = Depends(get_db)):
+    """Raw nested data for a year. Aggregates and currency conversion are
+    computed client-side from the monthly values."""
     year = _get_year(db, year_id)
     project = db.get(models.Project, year.project_id)
-    return finance.compute_year_view(project, year)
+    legs = (
+        db.query(models.WbsLeg)
+        .filter(models.WbsLeg.year_id == year_id)
+        .order_by(models.WbsLeg.position, models.WbsLeg.id)
+        .all()
+    )
+    leg_views = []
+    for leg in legs:
+        items = sorted(leg.items, key=lambda i: (i.position, i.id))
+        item_views = []
+        for it in items:
+            months = {m.month: m for m in it.months}
+            # backfill any missing month rows (e.g. legacy items)
+            for m in range(1, 13):
+                if m not in months:
+                    mm = models.BudgetMonth(item_id=it.id, month=m)
+                    db.add(mm)
+                    db.flush()
+                    months[m] = mm
+            item_views.append(
+                schemas.BudgetItemFull(
+                    **schemas.BudgetItemOut.model_validate(it).model_dump(),
+                    months=[
+                        schemas.BudgetMonthOut.model_validate(months[m])
+                        for m in range(1, 13)
+                    ],
+                )
+            )
+        crs = sorted(leg.change_requests, key=lambda c: (c.position, c.id))
+        leg_views.append(
+            schemas.WbsLegFull(
+                **schemas.WbsLegOut.model_validate(leg).model_dump(),
+                items=item_views,
+                change_requests=[
+                    schemas.ChangeRequestOut.model_validate(c) for c in crs
+                ],
+            )
+        )
+    db.commit()
+    return schemas.FinanceYearData(
+        project=schemas.ProjectOut.model_validate(project),
+        year=schemas.FinancialYearOut.model_validate(year),
+        legs=leg_views,
+    )

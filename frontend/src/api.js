@@ -66,10 +66,17 @@ export const api = {
   createLeg: (yearId, l) => req("POST", `/financial-years/${yearId}/wbs-legs`, l),
   updateLeg: (id, l) => req("PUT", `/wbs-legs/${id}`, l),
   deleteLeg: (id) => req("DELETE", `/wbs-legs/${id}`),
+  // wbs categories (project-level pick list)
+  listCategories: (pid) => req("GET", `/projects/${pid}/wbs-categories`),
+  createCategory: (pid, c) => req("POST", `/projects/${pid}/wbs-categories`, c),
+  updateCategory: (id, c) => req("PUT", `/wbs-categories/${id}`, c),
+  deleteCategory: (id) => req("DELETE", `/wbs-categories/${id}`),
   // budget items
   createItem: (legId, it) => req("POST", `/wbs-legs/${legId}/budget-items`, it),
   updateItem: (id, it) => req("PUT", `/budget-items/${id}`, it),
   deleteItem: (id) => req("DELETE", `/budget-items/${id}`),
+  // budget months (cell saves)
+  updateMonth: (id, m) => req("PUT", `/budget-months/${id}`, m),
   // change requests
   createCR: (legId, cr) => req("POST", `/wbs-legs/${legId}/change-requests`, cr),
   updateCR: (id, cr) => req("PUT", `/change-requests/${id}`, cr),

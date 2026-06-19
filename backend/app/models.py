@@ -48,6 +48,11 @@ class Project(Base):
         cascade="all, delete-orphan",
         order_by="FinancialYear.year",
     )
+    wbs_categories: Mapped[list["WbsCategory"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="WbsCategory.position",
+    )
 
 
 class TaskDefinition(Base):
@@ -171,6 +176,8 @@ class FinancialYear(Base):
     # base-currency units per 1 unit of reporting currency (e.g. 405 HUF / EUR)
     rate_1: Mapped[float] = mapped_column(Float, default=0.0)
     rate_2: Mapped[float] = mapped_column(Float, default=0.0)
+    # months >= this are Forecast, months below are Actual (1..13). 1 = all FC.
+    forecast_from_month: Mapped[int] = mapped_column(Integer, default=1)
 
     project: Mapped["Project"] = relationship(back_populates="financial_years")
     wbs_legs: Mapped[list["WbsLeg"]] = relationship(
@@ -208,10 +215,27 @@ class WbsLeg(Base):
     )
 
 
+class WbsCategory(Base):
+    """A WBS category label defined at project setup (e.g. Internal CAPEX).
+    WBS legs reference one of these by name."""
+
+    __tablename__ = "wbs_categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(120), default="")
+
+    project: Mapped["Project"] = relationship(back_populates="wbs_categories")
+
+
 class BudgetItem(Base):
-    """A budget line inside a WBS leg. Either a fixed amount or manday * daily
-    rate, separately for Budget / Actual / Forecast. All amounts/rates are in
-    the project's base currency."""
+    """A budget line inside a WBS leg. Values are entered per month (see
+    BudgetMonth); the yearly Budget/Actual/Forecast aggregates are computed from
+    them. 'fixed' items store a base-currency amount per month; 'manday' items
+    store a manday count per month, multiplied by the item's single daily_rate."""
 
     __tablename__ = "budget_items"
 
@@ -221,23 +245,38 @@ class BudgetItem(Base):
     )
     position: Mapped[int] = mapped_column(Integer, default=0)
     name: Mapped[str] = mapped_column(String(400), default="")
-    responsible: Mapped[str] = mapped_column(String(200), default="")
     item_type: Mapped[str] = mapped_column(String(20), default="fixed")  # fixed | manday
-
-    # fixed-type amounts (base currency)
-    budget_amount: Mapped[float] = mapped_column(Float, default=0.0)
-    actual_amount: Mapped[float] = mapped_column(Float, default=0.0)
-    forecast_amount: Mapped[float] = mapped_column(Float, default=0.0)
-
-    # manday-type: manday count + daily rate (base currency); total = manday * rate
-    budget_manday: Mapped[float] = mapped_column(Float, default=0.0)
-    budget_rate: Mapped[float] = mapped_column(Float, default=0.0)
-    actual_manday: Mapped[float] = mapped_column(Float, default=0.0)
-    actual_rate: Mapped[float] = mapped_column(Float, default=0.0)
-    forecast_manday: Mapped[float] = mapped_column(Float, default=0.0)
-    forecast_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    # daily rate (base currency) for manday-type items
+    daily_rate: Mapped[float] = mapped_column(Float, default=0.0)
 
     leg: Mapped["WbsLeg"] = relationship(back_populates="items")
+    months: Mapped[list["BudgetMonth"]] = relationship(
+        back_populates="item",
+        cascade="all, delete-orphan",
+        order_by="BudgetMonth.month",
+    )
+
+
+class BudgetMonth(Base):
+    """One month of a budget item. For 'fixed' items the values are amounts in
+    base currency; for 'manday' items they are manday counts (amount = value *
+    item.daily_rate). 'realized_value' shows as Actual or Forecast depending on
+    the year's forecast_from_month cutoff."""
+
+    __tablename__ = "budget_months"
+    __table_args__ = (
+        UniqueConstraint("item_id", "month", name="uq_item_month"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    item_id: Mapped[int] = mapped_column(
+        ForeignKey("budget_items.id", ondelete="CASCADE"), index=True
+    )
+    month: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..12
+    budget_value: Mapped[float] = mapped_column(Float, default=0.0)
+    realized_value: Mapped[float] = mapped_column(Float, default=0.0)
+
+    item: Mapped["BudgetItem"] = relationship(back_populates="months")
 
 
 class ChangeRequest(Base):

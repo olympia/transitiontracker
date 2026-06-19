@@ -88,6 +88,9 @@ def _run_migrations() -> None:
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS base_currency VARCHAR(10) NOT NULL DEFAULT 'HUF'",
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS reporting_currency_1 VARCHAR(10) NOT NULL DEFAULT ''",
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS reporting_currency_2 VARCHAR(10) NOT NULL DEFAULT ''",
+        # financial tracker: monthly model
+        "ALTER TABLE financial_years ADD COLUMN IF NOT EXISTS forecast_from_month INT NOT NULL DEFAULT 1",
+        "ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS daily_rate DOUBLE NOT NULL DEFAULT 0",
     ]
     with engine.connect() as conn:
         for stmt in statements:
