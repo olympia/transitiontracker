@@ -74,11 +74,9 @@ export const OVERALL_META = {
 
 export function fmtDate(iso) {
   if (!iso) return "";
-  const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
-  if (isNaN(d)) return iso;
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  const s = String(iso);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  return d.toISOString().slice(0, 10);
 }

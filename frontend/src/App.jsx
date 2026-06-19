@@ -46,6 +46,7 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  const [drill, setDrill] = useState(null);
 
   async function loadProjects(selectId) {
     const list = await api.listProjects();
@@ -63,6 +64,7 @@ export default function App() {
 
   useEffect(() => {
     if (projectId) localStorage.setItem("tt-project", String(projectId));
+    setDrill(null);
   }, [projectId]);
 
   const project = useMemo(
@@ -166,7 +168,7 @@ export default function App() {
               return (
                 <button
                   key={t.id}
-                  onClick={() => setTab(t.id)}
+                  onClick={() => { setTab(t.id); setDrill(null); }}
                   className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold transition ${
                     active
                       ? "border-brand-600 text-brand-600"
@@ -185,9 +187,9 @@ export default function App() {
         {!project ? (
           <Projects projects={projects} onChange={loadProjects} />
         ) : tab === "dashboard" ? (
-          <Dashboard project={project} />
+          <Dashboard project={project} drill={drill} onClearDrill={() => setDrill(null)} />
         ) : tab === "report" ? (
-          <Report project={project} />
+          <Report project={project} onDrill={(ids, label) => { setDrill({ ids, label }); setTab("dashboard"); }} />
         ) : tab === "template" ? (
           <TemplateEditor project={project} />
         ) : (

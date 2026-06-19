@@ -29,7 +29,7 @@ function periodInfo(date, granularity) {
   return { key, label, sort: ws.getTime() };
 }
 
-export default function Report({ project }) {
+export default function Report({ project, onDrill }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [granularity, setGranularity] = useState(
@@ -70,8 +70,9 @@ export default function Report({ project }) {
       if (!cell || cell.status !== "done") continue;
       total++;
       const p = periodInfo(date, granularity);
-      const cur = map.get(p.key) || { ...p, count: 0 };
+      const cur = map.get(p.key) || { ...p, count: 0, ids: [] };
       cur.count++;
+      cur.ids.push(r.entity_id);
       map.set(p.key, cur);
     }
     const arr = [...map.values()].sort((a, b) => a.sort - b.sort);
@@ -143,7 +144,7 @@ export default function Report({ project }) {
             </div>
           </div>
           <div className="card p-5">
-            <ComboChart buckets={buckets} />
+            <ComboChart buckets={buckets} onBar={onDrill} />
             <ChartLegend />
           </div>
         </>
@@ -262,7 +263,7 @@ function PlanTimeline({ defs, entityLabel }) {
   );
 }
 
-function ComboChart({ buckets }) {
+function ComboChart({ buckets, onBar }) {
   const H = 320;
   const padL = 40;
   const padR = 20;
@@ -317,7 +318,8 @@ function ComboChart({ buckets }) {
           const bw = colW - barGap;
           const by = y(b.count);
           return (
-            <g key={b.key}>
+            <g key={b.key} onClick={() => onBar && onBar(b.ids, b.label)} style={{ cursor: onBar ? "pointer" : "default" }}>
+              <rect x={padL + i * colW} y={padT} width={colW} height={innerH} fill="transparent" />
               <rect
                 x={bx}
                 y={by}
@@ -327,7 +329,7 @@ function ComboChart({ buckets }) {
                 className="fill-brand-500/80"
               >
                 <title>
-                  {b.label}: {b.count} live
+                  {b.label}: {b.count} live (click to filter)
                 </title>
               </rect>
               <text

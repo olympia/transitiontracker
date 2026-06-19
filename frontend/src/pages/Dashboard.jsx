@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Search, LayoutGrid, RefreshCw, CalendarClock, Upload,
-  ZoomIn, ZoomOut, Maximize2, ChevronDown, Filter, StickyNote,
+  ZoomIn, ZoomOut, Maximize2, ChevronDown, Filter, StickyNote, X,
 } from "lucide-react";
 import { api } from "../api";
 import { Badge, EmptyState, Spinner, Modal, Field } from "../components/ui.jsx";
@@ -18,10 +18,11 @@ const TASK_FILTER_OPTIONS = [
   { v: "duesoon", l: "Due soon" }, { v: "future", l: "Scheduled" }, { v: "onhold", l: "On hold" }, { v: "none", l: "Not set" },
 ];
 const GOLIVE_FILTER_OPTIONS = [{ v: "all", l: "All" }, { v: "has", l: "Has date" }, { v: "none", l: "No date" }];
-const W_RACK = 240, W_GOLIVE = 104, W_STATUS = 168, W_NEXT = 96, MIN_CELL = 12, MAX_CELL = 44;
+const W_RACK = 240, W_GOLIVE = 116, W_STATUS = 168, W_NEXT = 120, MIN_CELL = 12, MAX_CELL = 44;
 function lsBool(key, def) { const v = localStorage.getItem(key); return v === null ? def : v === "1"; }
+function pct1(v, total) { return total > 0 ? ((v / total) * 100).toFixed(1) + "%" : "0.0%"; }
 
-export default function Dashboard({ project }) {
+export default function Dashboard({ project, drill, onClearDrill }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -58,6 +59,7 @@ export default function Dashboard({ project }) {
   function toggleEntityStats() { setEntityStatsOpen((v) => { localStorage.setItem("tt-stats-entity", v ? "0" : "1"); return !v; }); }
   function toggleTaskStats() { setTaskStatsOpen((v) => { localStorage.setItem("tt-stats-task", v ? "0" : "1"); return !v; }); }
   function setTaskFilter(id, val) { setTaskFilters((cur) => { const next = { ...cur }; if (!val) delete next[id]; else next[id] = val; return next; }); }
+  async function saveGolive(entityId, date) { await api.updateEntity(entityId, { golive_date: date || null, clear_golive: !date }); await load(); }
 
   function askToggle(cell, name) { setConfirm({ instanceId: cell.instance_id, done: cell.status === "done", name }); }
   async function applyToggle() { const c = confirm; setConfirm(null); await api.updateInstance(c.instanceId, { done: !c.done, clear_actual: c.done }); await load(); }
@@ -76,7 +78,9 @@ export default function Dashboard({ project }) {
     if (!data) return [];
     const needle = q.trim().toLowerCase();
     const tf = Object.entries(taskFilters);
+    const drillSet = drill ? new Set(drill.ids) : null;
     return data.rows.filter((r) => {
+      if (drillSet && !drillSet.has(r.entity_id)) return false;
       if (filter !== "all" && r.overall !== filter) return false;
       if (goliveFilter === "has" && !r.golive_date) return false;
       if (goliveFilter === "none" && r.golive_date) return false;
@@ -84,7 +88,7 @@ export default function Dashboard({ project }) {
       if (!needle) return true;
       return r.code.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle) || r.location.toLowerCase().includes(needle);
     });
-  }, [data, q, filter, goliveFilter, taskFilters]);
+  }, [data, q, filter, goliveFilter, taskFilters, drill]);
 
   if (loading && !data) return <Spinner />;
 
@@ -93,19 +97,19 @@ export default function Dashboard({ project }) {
       <StatSection title="Entities" open={entityStatsOpen} onToggle={toggleEntityStats}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={project.entity_label + "s"} value={stats.total} tone="brand" />
-          <StatCard label="Completed" value={stats.completed} tone="green" />
-          <StatCard label="Scheduled" value={stats.ontrack} tone="slate" />
-          <StatCard label="Due soon" value={stats.duesoon} tone="amber" />
-          <StatCard label="Overdue" value={stats.delayed} tone="red" />
-          <StatCard label="On hold" value={stats.onhold} tone="blue" />
+          <StatCard label="Completed" value={stats.completed} pct={pct1(stats.completed, stats.total)} tone="green" />
+          <StatCard label="Scheduled" value={stats.ontrack} pct={pct1(stats.ontrack, stats.total)} tone="slate" />
+          <StatCard label="Due soon" value={stats.duesoon} pct={pct1(stats.duesoon, stats.total)} tone="amber" />
+          <StatCard label="Overdue" value={stats.delayed} pct={pct1(stats.delayed, stats.total)} tone="red" />
+          <StatCard label="On hold" value={stats.onhold} pct={pct1(stats.onhold, stats.total)} tone="blue" />
         </div>
       </StatSection>
       <StatSection title="Tasks" open={taskStatsOpen} onToggle={toggleTaskStats}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Tasks done" value={`${taskStats.done} / ${taskStats.total}`} tone="green" />
-          <StatCard label="Overdue" value={taskStats.overdue} tone="red" />
-          <StatCard label="Due soon" value={taskStats.duesoon} tone="amber" />
-          <StatCard label="Scheduled" value={taskStats.future} tone="slate" />
+          <StatCard label="Tasks done" value={`${taskStats.done} / ${taskStats.total}`} pct={pct1(taskStats.done, taskStats.total)} tone="green" />
+          <StatCard label="Overdue" value={taskStats.overdue} pct={pct1(taskStats.overdue, taskStats.total)} tone="red" />
+          <StatCard label="Due soon" value={taskStats.duesoon} pct={pct1(taskStats.duesoon, taskStats.total)} tone="amber" />
+          <StatCard label="Scheduled" value={taskStats.future} pct={pct1(taskStats.future, taskStats.total)} tone="slate" />
         </div>
       </StatSection>
 
@@ -134,6 +138,12 @@ export default function Dashboard({ project }) {
         </div>
       </div>
 
+      {drill && (
+        <div className="flex items-center justify-between rounded-xl bg-brand-50 px-4 py-2.5 text-sm ring-1 ring-inset ring-brand-500/20 dark:bg-brand-500/10">
+          <span className="text-brand-700 dark:text-brand-300">Live in <span className="font-semibold">{drill.label}</span>: {rows.length} {project.entity_label.toLowerCase()}{rows.length === 1 ? "" : "s"}</span>
+          <button className="btn-ghost px-2 py-1 text-xs" onClick={onClearDrill}><X size={14} /> Clear</button>
+        </div>
+      )}
       <div ref={wrapRef}>
         {rows.length === 0 ? (
           <EmptyState icon={LayoutGrid}
@@ -143,7 +153,7 @@ export default function Dashboard({ project }) {
         ) : (
           <Matrix defs={defs} rows={rows} entityLabel={project.entity_label} cellPx={cellPx}
             goliveFilter={goliveFilter} setGoliveFilter={setGoliveFilter} taskFilters={taskFilters} setTaskFilter={setTaskFilter}
-            onOpen={(id, tab) => setOpen({ id, tab })} onToggleTask={askToggle} />
+            onOpen={(id, tab) => setOpen({ id, tab })} onToggleTask={askToggle} onGoliveSave={saveGolive} />
         )}
       </div>
 
@@ -172,7 +182,7 @@ function StatSection({ title, open, onToggle, children }) {
   );
 }
 
-function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter, taskFilters, setTaskFilter, onOpen, onToggleTask }) {
+function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter, taskFilters, setTaskFilter, onOpen, onToggleTask, onGoliveSave }) {
   const square = Math.max(5, Math.min(cellPx - 14, 9));
   const goliveId = defs.find((d) => d.is_golive)?.id;
   const [popover, setPopover] = useState(null);
@@ -194,7 +204,7 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
                 <button onClick={openGoliveFilter} className={`flex items-center gap-1 text-xs font-bold uppercase tracking-wide ${goliveFilter !== "all" ? "text-brand-600" : "text-slate-500 hover:text-slate-700"}`}>Go-live <Filter size={11} /></button>
               </th>
               <th {...cornerStyle(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell")}><span className="text-xs font-bold uppercase tracking-wide text-slate-500">Status</span></th>
-              <th {...cornerStyle(W_RACK + W_GOLIVE + W_STATUS, W_NEXT, "hidden md:table-cell")}><span className="text-xs font-bold uppercase tracking-wide text-slate-500" title="Next steps whose due date has arrived or passed">Next due</span></th>
+              <th {...cornerStyle(W_RACK + W_GOLIVE + W_STATUS, W_NEXT, "hidden md:table-cell")}><span className="text-xs font-bold uppercase tracking-wide text-slate-500" title="Next steps whose due date has arrived or passed">Overdue next steps</span></th>
               {defs.map((d) => {
                 const active = !!taskFilters[d.id];
                 return (
@@ -221,7 +231,7 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
                     </div>
                     <button className="block truncate text-left text-xs text-slate-400 hover:text-brand-600" onClick={() => onOpen(r.entity_id, "tasks")}>{r.name || r.location}</button>
                   </td>
-                  <td {...stickyBody(W_RACK, W_GOLIVE, "hidden md:table-cell cursor-pointer")} onClick={() => onOpen(r.entity_id, "tasks")}><span className="whitespace-nowrap text-xs text-slate-500">{r.golive_date ? fmtDate(r.golive_date) : "—"}</span></td>
+                  <td {...stickyBody(W_RACK, W_GOLIVE, "hidden md:table-cell")}><GoliveCell row={r} onSave={onGoliveSave} /></td>
                   <td {...stickyBody(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell cursor-pointer")} onClick={() => onOpen(r.entity_id, "tasks")}><Badge meta={om} /></td>
                   <td {...stickyBody(W_RACK + W_GOLIVE + W_STATUS, W_NEXT, "hidden md:table-cell cursor-pointer")} onClick={() => onOpen(r.entity_id, "tasks")}>
                     {r.next_steps_due > 0 ? (
@@ -273,12 +283,45 @@ function Legend() {
   );
 }
 
-function StatCard({ label, value, tone }) {
+function StatCard({ label, value, pct, tone }) {
   const tones = { brand: "text-brand-600", green: "text-emerald-600", amber: "text-amber-600", red: "text-rose-600", blue: "text-blue-600", slate: "text-slate-500" };
   return (
     <div className="card px-4 py-3">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`mt-1 text-2xl font-extrabold ${tones[tone]}`}>{value}</div>
+      <div className="mt-1 flex items-baseline gap-1.5">
+        <span className={`text-2xl font-extrabold ${tones[tone]}`}>{value}</span>
+        {pct && <span className="text-xs font-semibold text-slate-400">{pct}</span>}
+      </div>
+    </div>
+  );
+}
+
+function GoliveCell({ row, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(row.golive_date || "");
+  useEffect(() => setVal(row.golive_date || ""), [row.golive_date]);
+  async function commit() {
+    setEditing(false);
+    if ((val || "") === (row.golive_date || "")) return;
+    await onSave(row.entity_id, val || null);
+  }
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      {editing ? (
+        <input
+          type="date"
+          autoFocus
+          className="input w-[112px] px-2 py-1 text-xs"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        />
+      ) : (
+        <button className="whitespace-nowrap text-xs text-slate-500 hover:text-brand-600" onClick={() => setEditing(true)}>
+          {row.golive_date ? fmtDate(row.golive_date) : "Set date"}
+        </button>
+      )}
     </div>
   );
 }
