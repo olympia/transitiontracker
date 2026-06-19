@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app import imports, models, schemas, status as status_logic
+from app import finance, imports, models, schemas, status as status_logic
 from app.database import get_db
 
 router = APIRouter(prefix="/api")
@@ -519,3 +519,251 @@ async def import_excel(
         )
     counts = imports.apply_import(db, project_id, parsed, mode)
     return counts
+
+
+# ============================================================ financial tracker
+def _get_year(db: Session, year_id: int) -> models.FinancialYear:
+    obj = db.get(models.FinancialYear, year_id)
+    if not obj:
+        raise HTTPException(404, "Financial year not found")
+    return obj
+
+
+def _get_leg(db: Session, leg_id: int) -> models.WbsLeg:
+    obj = db.get(models.WbsLeg, leg_id)
+    if not obj:
+        raise HTTPException(404, "WBS leg not found")
+    return obj
+
+
+# ---------------------------------------------------------------- years
+@router.get(
+    "/projects/{project_id}/financial-years",
+    response_model=list[schemas.FinancialYearOut],
+)
+def list_years(project_id: int, db: Session = Depends(get_db)):
+    _get_project(db, project_id)
+    return (
+        db.query(models.FinancialYear)
+        .filter(models.FinancialYear.project_id == project_id)
+        .order_by(models.FinancialYear.year)
+        .all()
+    )
+
+
+@router.post(
+    "/projects/{project_id}/financial-years",
+    response_model=schemas.FinancialYearOut,
+)
+def create_year(
+    project_id: int,
+    payload: schemas.FinancialYearCreate,
+    db: Session = Depends(get_db),
+):
+    _get_project(db, project_id)
+    exists = (
+        db.query(models.FinancialYear)
+        .filter(
+            models.FinancialYear.project_id == project_id,
+            models.FinancialYear.year == payload.year,
+        )
+        .first()
+    )
+    if exists:
+        raise HTTPException(400, f"Year {payload.year} already exists")
+    obj = models.FinancialYear(project_id=project_id, **payload.model_dump())
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put(
+    "/financial-years/{year_id}", response_model=schemas.FinancialYearOut
+)
+def update_year(
+    year_id: int,
+    payload: schemas.FinancialYearUpdate,
+    db: Session = Depends(get_db),
+):
+    obj = _get_year(db, year_id)
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.delete("/financial-years/{year_id}")
+def delete_year(year_id: int, db: Session = Depends(get_db)):
+    obj = _get_year(db, year_id)
+    db.delete(obj)
+    db.commit()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- wbs legs
+@router.get(
+    "/financial-years/{year_id}/wbs-legs",
+    response_model=list[schemas.WbsLegOut],
+)
+def list_legs(year_id: int, db: Session = Depends(get_db)):
+    _get_year(db, year_id)
+    return (
+        db.query(models.WbsLeg)
+        .filter(models.WbsLeg.year_id == year_id)
+        .order_by(models.WbsLeg.position, models.WbsLeg.id)
+        .all()
+    )
+
+
+@router.post(
+    "/financial-years/{year_id}/wbs-legs", response_model=schemas.WbsLegOut
+)
+def create_leg(
+    year_id: int, payload: schemas.WbsLegCreate, db: Session = Depends(get_db)
+):
+    _get_year(db, year_id)
+    data = payload.model_dump()
+    if not data.get("position"):
+        data["position"] = (
+            db.query(models.WbsLeg)
+            .filter(models.WbsLeg.year_id == year_id)
+            .count()
+        )
+    obj = models.WbsLeg(year_id=year_id, **data)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put("/wbs-legs/{leg_id}", response_model=schemas.WbsLegOut)
+def update_leg(
+    leg_id: int, payload: schemas.WbsLegUpdate, db: Session = Depends(get_db)
+):
+    obj = _get_leg(db, leg_id)
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.delete("/wbs-legs/{leg_id}")
+def delete_leg(leg_id: int, db: Session = Depends(get_db)):
+    obj = _get_leg(db, leg_id)
+    db.delete(obj)
+    db.commit()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- budget items
+@router.post(
+    "/wbs-legs/{leg_id}/budget-items", response_model=schemas.BudgetItemOut
+)
+def create_item(
+    leg_id: int, payload: schemas.BudgetItemCreate, db: Session = Depends(get_db)
+):
+    _get_leg(db, leg_id)
+    data = payload.model_dump()
+    if not data.get("position"):
+        data["position"] = (
+            db.query(models.BudgetItem)
+            .filter(models.BudgetItem.leg_id == leg_id)
+            .count()
+        )
+    obj = models.BudgetItem(leg_id=leg_id, **data)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put("/budget-items/{item_id}", response_model=schemas.BudgetItemOut)
+def update_item(
+    item_id: int,
+    payload: schemas.BudgetItemUpdate,
+    db: Session = Depends(get_db),
+):
+    obj = db.get(models.BudgetItem, item_id)
+    if not obj:
+        raise HTTPException(404, "Budget item not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.delete("/budget-items/{item_id}")
+def delete_item(item_id: int, db: Session = Depends(get_db)):
+    obj = db.get(models.BudgetItem, item_id)
+    if not obj:
+        raise HTTPException(404, "Budget item not found")
+    db.delete(obj)
+    db.commit()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- change requests
+@router.post(
+    "/wbs-legs/{leg_id}/change-requests",
+    response_model=schemas.ChangeRequestOut,
+)
+def create_cr(
+    leg_id: int,
+    payload: schemas.ChangeRequestCreate,
+    db: Session = Depends(get_db),
+):
+    _get_leg(db, leg_id)
+    data = payload.model_dump()
+    if not data.get("position"):
+        data["position"] = (
+            db.query(models.ChangeRequest)
+            .filter(models.ChangeRequest.leg_id == leg_id)
+            .count()
+        )
+    obj = models.ChangeRequest(leg_id=leg_id, **data)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put(
+    "/change-requests/{cr_id}", response_model=schemas.ChangeRequestOut
+)
+def update_cr(
+    cr_id: int,
+    payload: schemas.ChangeRequestUpdate,
+    db: Session = Depends(get_db),
+):
+    obj = db.get(models.ChangeRequest, cr_id)
+    if not obj:
+        raise HTTPException(404, "Change request not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.delete("/change-requests/{cr_id}")
+def delete_cr(cr_id: int, db: Session = Depends(get_db)):
+    obj = db.get(models.ChangeRequest, cr_id)
+    if not obj:
+        raise HTTPException(404, "Change request not found")
+    db.delete(obj)
+    db.commit()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- finance view
+@router.get(
+    "/financial-years/{year_id}/view", response_model=schemas.FinanceYearView
+)
+def get_finance_view(year_id: int, db: Session = Depends(get_db)):
+    year = _get_year(db, year_id)
+    project = db.get(models.Project, year.project_id)
+    return finance.compute_year_view(project, year)

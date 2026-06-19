@@ -4,6 +4,7 @@ import {
   ListChecks,
   FolderKanban,
   BarChart3,
+  Wallet,
   Moon,
   Sun,
   ChevronDown,
@@ -15,6 +16,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import TemplateEditor from "./pages/TemplateEditor.jsx";
 import Projects from "./pages/Projects.jsx";
 import Report from "./pages/Report.jsx";
+import Finance from "./pages/Finance.jsx";
 
 function useTheme() {
   const [dark, setDark] = useState(
@@ -33,6 +35,7 @@ function useTheme() {
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
   { id: "report", label: "Report", icon: BarChart3 },
+  { id: "finance", label: "Finance", icon: Wallet },
   { id: "template", label: "Task template", icon: ListChecks },
   { id: "projects", label: "Projects", icon: FolderKanban },
 ];
@@ -190,6 +193,8 @@ export default function App() {
           <Dashboard project={project} drill={drill} onClearDrill={() => setDrill(null)} />
         ) : tab === "report" ? (
           <Report project={project} onDrill={(ids, label) => { setDrill({ ids, label }); setTab("dashboard"); }} />
+        ) : tab === "finance" ? (
+          <Finance project={project} onProjectChange={loadProjects} />
         ) : tab === "template" ? (
           <TemplateEditor project={project} />
         ) : (

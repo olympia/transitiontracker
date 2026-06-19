@@ -84,6 +84,10 @@ def _run_migrations() -> None:
         "ALTER TABLE entities ADD COLUMN IF NOT EXISTS contact_email VARCHAR(200) NOT NULL DEFAULT ''",
         "ALTER TABLE task_instances ADD COLUMN IF NOT EXISTS next_step VARCHAR(500) NOT NULL DEFAULT ''",
         "ALTER TABLE task_instances ADD COLUMN IF NOT EXISTS next_step_due DATE NULL",
+        # financial tracker: project currency config
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS base_currency VARCHAR(10) NOT NULL DEFAULT 'HUF'",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS reporting_currency_1 VARCHAR(10) NOT NULL DEFAULT ''",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS reporting_currency_2 VARCHAR(10) NOT NULL DEFAULT ''",
     ]
     with engine.connect() as conn:
         for stmt in statements:

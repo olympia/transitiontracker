@@ -54,6 +54,27 @@ export const api = {
   // matrix
   matrix: (pid) => req("GET", `/projects/${pid}/matrix`),
 
+  // ---- financial tracker ----
+  // years
+  listYears: (pid) => req("GET", `/projects/${pid}/financial-years`),
+  createYear: (pid, y) => req("POST", `/projects/${pid}/financial-years`, y),
+  updateYear: (id, y) => req("PUT", `/financial-years/${id}`, y),
+  deleteYear: (id) => req("DELETE", `/financial-years/${id}`),
+  financeView: (yearId) => req("GET", `/financial-years/${yearId}/view`),
+  // wbs legs
+  listLegs: (yearId) => req("GET", `/financial-years/${yearId}/wbs-legs`),
+  createLeg: (yearId, l) => req("POST", `/financial-years/${yearId}/wbs-legs`, l),
+  updateLeg: (id, l) => req("PUT", `/wbs-legs/${id}`, l),
+  deleteLeg: (id) => req("DELETE", `/wbs-legs/${id}`),
+  // budget items
+  createItem: (legId, it) => req("POST", `/wbs-legs/${legId}/budget-items`, it),
+  updateItem: (id, it) => req("PUT", `/budget-items/${id}`, it),
+  deleteItem: (id) => req("DELETE", `/budget-items/${id}`),
+  // change requests
+  createCR: (legId, cr) => req("POST", `/wbs-legs/${legId}/change-requests`, cr),
+  updateCR: (id, cr) => req("PUT", `/change-requests/${id}`, cr),
+  deleteCR: (id) => req("DELETE", `/change-requests/${id}`),
+
   // import
   importTemplateUrl: () => BASE + "/import-template",
   importExcel: async (pid, file, mode) => {
