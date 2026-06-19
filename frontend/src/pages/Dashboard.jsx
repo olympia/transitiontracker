@@ -11,7 +11,7 @@ import EntityDrawer from "./EntityDrawer.jsx";
 
 const FILTERS = [
   { id: "all", label: "All" }, { id: "delayed", label: "Overdue" }, { id: "duesoon", label: "Due soon" },
-  { id: "ontrack", label: "On track" }, { id: "completed", label: "Completed" }, { id: "onhold", label: "On hold" }, { id: "none", label: "Not Scheduled" },
+  { id: "ontrack", label: "Scheduled" }, { id: "completed", label: "Completed" }, { id: "onhold", label: "On hold" }, { id: "none", label: "Not Scheduled" },
 ];
 const TASK_FILTER_OPTIONS = [
   { v: "", l: "Any status" }, { v: "done", l: "Completed" }, { v: "overdue", l: "Overdue" },
@@ -94,7 +94,7 @@ export default function Dashboard({ project }) {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={project.entity_label + "s"} value={stats.total} tone="brand" />
           <StatCard label="Completed" value={stats.completed} tone="green" />
-          <StatCard label="On track" value={stats.ontrack} tone="slate" />
+          <StatCard label="Scheduled" value={stats.ontrack} tone="slate" />
           <StatCard label="Due soon" value={stats.duesoon} tone="amber" />
           <StatCard label="Overdue" value={stats.delayed} tone="red" />
           <StatCard label="On hold" value={stats.onhold} tone="blue" />

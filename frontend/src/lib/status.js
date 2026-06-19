@@ -46,7 +46,7 @@ export const OVERALL_META = {
     dot: "bg-emerald-500",
   },
   ontrack: {
-    label: "On track",
+    label: "Scheduled",
     soft: "bg-slate-100 text-slate-600 ring-slate-400/20 dark:bg-slate-800 dark:text-slate-300",
     dot: "bg-slate-400",
   },

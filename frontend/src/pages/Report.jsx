@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BarChart3, Flag, TrendingUp } from "lucide-react";
+import { BarChart3, Flag, TrendingUp, CalendarClock, Infinity as InfinityIcon } from "lucide-react";
 import { api } from "../api";
 import { Spinner, EmptyState } from "../components/ui.jsx";
 
@@ -86,7 +86,8 @@ export default function Report({ project }) {
   if (loading && !data) return <Spinner />;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
+      <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-extrabold">Go-live report</h2>
@@ -146,6 +147,116 @@ export default function Report({ project }) {
             <ChartLegend />
           </div>
         </>
+      )}
+      </div>
+
+      <PlanTimeline defs={data?.task_definitions ?? []} entityLabel={project.entity_label} />
+    </div>
+  );
+}
+
+function dayLabel(day) {
+  if (day === 0) return "Go-live";
+  return day < 0 ? `${-day} day${day === -1 ? "" : "s"} before` : `${day} day${day === 1 ? "" : "s"} after`;
+}
+
+function PlanTimeline({ defs, entityLabel }) {
+  if (!defs || defs.length === 0) return null;
+  const scheduled = defs.filter((d) => !d.no_deadline);
+  const noDeadline = defs.filter((d) => d.no_deadline);
+  const groups = {};
+  scheduled.forEach((d) => {
+    const day = -d.offset_days;
+    (groups[day] = groups[day] || []).push(d);
+  });
+  const days = Object.keys(groups).map(Number).sort((a, b) => a - b);
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center gap-2">
+        <CalendarClock size={18} className="text-brand-600" />
+        <h2 className="text-lg font-extrabold">Plan timeline</h2>
+      </div>
+      <p className="mb-4 text-sm text-slate-500">
+        The repeating task plan laid out by each task's deadline relative to go-live.
+      </p>
+
+      {days.length === 0 ? (
+        <EmptyState
+          icon={CalendarClock}
+          title="No scheduled tasks"
+          subtitle="Add tasks with an offset in the Task template tab to see the plan timeline."
+        />
+      ) : (
+        <div className="card p-3 sm:p-5">
+          {days.map((day) => {
+            const gl = day === 0;
+            const accent = gl ? "border-emerald-500" : "border-slate-200 dark:border-slate-700";
+            return (
+              <div key={day} className="grid grid-cols-[84px_1fr] sm:grid-cols-[120px_1fr]">
+                <div
+                  className={`whitespace-nowrap py-3.5 pr-3 text-right text-[13px] ${
+                    gl ? "font-semibold text-emerald-600" : "text-slate-500"
+                  }`}
+                >
+                  {dayLabel(day)}
+                </div>
+                <div className={`relative border-l-2 py-2 pl-5 ${accent}`}>
+                  <span
+                    className={`absolute -left-[8px] top-[18px] h-3.5 w-3.5 rounded-full border-2 ${
+                      gl
+                        ? "border-emerald-500 bg-emerald-500"
+                        : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
+                    }`}
+                  />
+                  {groups[day].map((d) => {
+                    const isGl = d.is_golive;
+                    return (
+                      <div
+                        key={d.id}
+                        className={`my-1 flex items-center gap-2.5 rounded-lg px-3 py-1.5 ${
+                          isGl
+                            ? "bg-emerald-50 ring-1 ring-inset ring-emerald-500/30 dark:bg-emerald-500/10"
+                            : "bg-slate-50 dark:bg-slate-800/60"
+                        }`}
+                      >
+                        {isGl ? (
+                          <Flag size={13} className="shrink-0 text-emerald-600" />
+                        ) : (
+                          <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" />
+                        )}
+                        <span className="flex-1 text-sm text-slate-700 dark:text-slate-200">{d.name}</span>
+                        {d.responsible && (
+                          <span className="whitespace-nowrap text-xs text-slate-400">{d.responsible}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {noDeadline.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-400">
+            <InfinityIcon size={14} /> No deadline
+          </div>
+          <div className="card flex flex-wrap gap-2 p-3">
+            {noDeadline.map((d) => (
+              <span
+                key={d.id}
+                className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300"
+              >
+                <span className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                {d.name}
+                {d.responsible && <span className="text-xs text-slate-400">· {d.responsible}</span>}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
