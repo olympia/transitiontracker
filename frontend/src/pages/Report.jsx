@@ -318,15 +318,23 @@ function ComboChart({ buckets, onBar }) {
           const bw = colW - barGap;
           const by = y(b.count);
           return (
-            <g key={b.key} onClick={() => onBar && onBar(b.ids, b.label)} style={{ cursor: onBar ? "pointer" : "default" }}>
-              <rect x={padL + i * colW} y={padT} width={colW} height={innerH} fill="transparent" />
+            <g key={b.key} className="group/bar" onClick={() => onBar && onBar(b.ids, b.label)} style={{ cursor: onBar ? "pointer" : "default" }}>
+              <rect
+                x={padL + i * colW + 2}
+                y={padT}
+                width={colW - 4}
+                height={innerH}
+                rx="6"
+                strokeWidth="1.5"
+                className="fill-transparent stroke-transparent group-hover/bar:fill-brand-500/[0.08] group-hover/bar:stroke-brand-400/70"
+              />
               <rect
                 x={bx}
                 y={by}
                 width={bw}
                 height={padT + innerH - by}
                 rx="4"
-                className="fill-brand-500/80"
+                className="fill-brand-500/80 group-hover/bar:fill-brand-600"
               >
                 <title>
                   {b.label}: {b.count} live (click to filter)

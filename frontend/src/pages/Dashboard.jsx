@@ -225,11 +225,13 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
               return (
                 <tr key={r.entity_id} className="group">
                   <td {...stickyBody(0, W_RACK, "px-4")}>
-                    <div className="flex items-center gap-1.5">
-                      <button className="truncate text-left text-sm font-semibold hover:text-brand-600" onClick={() => onOpen(r.entity_id, "tasks")} title="Open">{r.code || "—"}</button>
-                      {r.has_notes && <button onClick={() => onOpen(r.entity_id, "notes")} title="Notes"><StickyNote size={13} className="shrink-0 text-amber-500" /></button>}
+                    <div className="flex items-start justify-between gap-1.5">
+                      <button className="group/ent min-w-0 flex-1 text-left" onClick={() => onOpen(r.entity_id, "tasks")} title="Open">
+                        <div className="truncate text-sm font-semibold group-hover/ent:text-brand-600">{r.code || "—"}</div>
+                        <div className="truncate text-xs text-slate-400 group-hover/ent:text-brand-500">{r.name || r.location}</div>
+                      </button>
+                      {r.has_notes && <button className="mt-0.5 shrink-0" onClick={() => onOpen(r.entity_id, "notes")} title="Notes"><StickyNote size={13} className="text-amber-500" /></button>}
                     </div>
-                    <button className="block truncate text-left text-xs text-slate-400 hover:text-brand-600" onClick={() => onOpen(r.entity_id, "tasks")}>{r.name || r.location}</button>
                   </td>
                   <td {...stickyBody(W_RACK, W_GOLIVE, "hidden md:table-cell")}><GoliveCell row={r} onSave={onGoliveSave} /></td>
                   <td {...stickyBody(W_RACK + W_GOLIVE, W_STATUS, "hidden md:table-cell cursor-pointer")} onClick={() => onOpen(r.entity_id, "tasks")}><Badge meta={om} /></td>
