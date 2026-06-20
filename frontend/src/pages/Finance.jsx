@@ -109,8 +109,7 @@ export default function Finance({ project, onProjectChange }) {
   const [data, setData] = useState(null);
   const [loadingView, setLoadingView] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [itemEdit, setItemEdit] = useState(null); // { legId, item }
-  const [crEdit, setCrEdit] = useState(null);
+  const [itemEdit, setItemEdit] = useState(null); // { legId, item, isCr? }
   const [legEdit, setLegEdit] = useState(null);
   const [displayCur, setDisplayCur] = useState(
     () => localStorage.getItem("tt-fin-cur") || ""
@@ -296,8 +295,8 @@ export default function Finance({ project, onProjectChange }) {
               onEditLeg={(leg) => setLegEdit({ yearId: data.year.id, leg })}
               onAddItem={(legId) => setItemEdit({ legId, item: null })}
               onEditItem={(legId, item) => setItemEdit({ legId, item })}
-              onAddCR={(legId) => setCrEdit({ legId, cr: null })}
-              onEditCR={(legId, cr) => setCrEdit({ legId, cr })}
+              onAddCR={(legId) => setItemEdit({ legId, item: null, isCr: true })}
+              onEditCR={(legId, cr) => setItemEdit({ legId, item: cr })}
               patchMonth={patchMonth}
               saveMonth={saveMonth}
               reload={loadView}
@@ -347,17 +346,6 @@ export default function Finance({ project, onProjectChange }) {
         />
       )}
 
-      {crEdit && (
-        <CRModal
-          ctx={crEdit}
-          codes={codes}
-          onClose={() => setCrEdit(null)}
-          onSaved={() => {
-            setCrEdit(null);
-            loadView();
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -384,10 +372,14 @@ function YearGrid({
   // convert a base amount into the display currency (null if no rate)
   const conv = (b) => (curFactor ? b / curFactor : null);
 
-  const legAggs = data.legs.map((leg) => sumAgg(leg.items.map((it) => aggItem(it, cutoff))));
+  // regular budget items drive the headline totals; CR rows are summed separately
+  const legAggs = data.legs.map((leg) =>
+    sumAgg(leg.items.filter((it) => !it.is_cr).map((it) => aggItem(it, cutoff)))
+  );
   const yearAgg = sumAgg(legAggs);
   const crTotal = data.legs.reduce(
-    (a, leg) => a + leg.change_requests.reduce((s, c) => s + num(c.amount), 0),
+    (a, leg) =>
+      a + sumAgg(leg.items.filter((it) => it.is_cr).map((it) => aggItem(it, cutoff))).budget,
     0
   );
 
@@ -437,7 +429,7 @@ function YearGrid({
               onAddCR={() => onAddCR(leg.id)}
               onEditCR={(cr) => onEditCR(leg.id, cr)}
               onDeleteCR={async (cr) => {
-                await api.deleteCR(cr.id);
+                await api.deleteItem(cr.id);
                 reload();
               }}
               patchMonth={patchMonth}
@@ -491,25 +483,30 @@ function LegCard({
   patchMonth,
   saveMonth,
 }) {
-  const itemAggs = leg.items.map((it) => aggItem(it, cutoff));
-  const legAgg = sumAgg(itemAggs);
-  const crTotal = leg.change_requests.reduce((s, c) => s + num(c.amount), 0);
-  // per-month totals across all items (base currency)
-  const monthTotals = MONTHS.map((_, idx) => {
-    const month = idx + 1;
-    let b = 0;
-    let r = 0;
-    for (const it of leg.items) {
-      const mm = it.months.find((x) => x.month === month);
-      if (mm) {
-        b += monthAmount(it, mm, "budget");
-        r += monthAmount(it, mm, "realized");
+  // regular budget items and change-request rows live in the same list
+  const regular = leg.items.filter((it) => !it.is_cr);
+  const crs = leg.items.filter((it) => it.is_cr);
+  const regAggs = regular.map((it) => aggItem(it, cutoff));
+  const crAggs = crs.map((it) => aggItem(it, cutoff));
+  const budgetAgg = sumAgg(regAggs);
+  const withCrsAgg = sumAgg([...regAggs, ...crAggs]);
+  // per-month totals (base currency) for a given list of items
+  const monthTot = (list) =>
+    MONTHS.map((_, idx) => {
+      const month = idx + 1;
+      let b = 0;
+      let r = 0;
+      for (const it of list) {
+        const mm = it.months.find((x) => x.month === month);
+        if (mm) {
+          b += monthAmount(it, mm, "budget");
+          r += monthAmount(it, mm, "realized");
+        }
       }
-    }
-    return { b, r };
-  });
-  // converted cell value, blank for zero
-  const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
+      return { b, r };
+    });
+  const budgetMonths = monthTot(regular);
+  const withCrsMonths = monthTot([...regular, ...crs]);
 
   return (
     <div className="card overflow-hidden">
@@ -572,153 +569,154 @@ function LegCard({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {leg.items.length === 0 && (
+            {regular.length === 0 && crs.length === 0 && (
               <tr>
                 <td colSpan={5 + 24 + 1} className="px-4 py-4 text-center text-sm text-slate-400">
                   No budget items yet.
                 </td>
               </tr>
             )}
-            {leg.items.map((it, i) => {
-              const a = itemAggs[i];
-              return (
-                <tr key={it.id} className="group hover:bg-slate-100 dark:hover:bg-slate-800">
-                  <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-4 py-1.5 font-medium dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800">
-                    {it.name || "—"}
-                    {it.item_type === "manday" && (
-                      <span className="ml-2 text-[11px] font-normal text-slate-400">
-                        {fmt(conv(it.daily_rate))} {cur}/d
-                      </span>
-                    )}
-                  </td>
-                  <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
-                  <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(a.actual))}</td>
-                  <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
-                  <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${COL_W}`}>{fmt(conv(a.total))}</td>
-                  {it.months.map((m) => {
-                    const zebra = m.month % 2 === 0;
-                    if (isBaseCur) {
-                      return (
-                        <React.Fragment key={m.id}>
-                          <MoneyInput
-                            value={m.budget_value}
-                            zebra={zebra}
-                            onCommit={(v) => {
-                              patchMonth(m.id, "budget", v);
-                              saveMonth(m.id, "budget", v);
-                            }}
-                          />
-                          <MoneyInput
-                            value={m.realized_value}
-                            forecast={m.month >= cutoff}
-                            zebra={zebra}
-                            onCommit={(v) => {
-                              patchMonth(m.id, "realized", v);
-                              saveMonth(m.id, "realized", v);
-                            }}
-                          />
-                        </React.Fragment>
-                      );
-                    }
-                    return (
-                      <React.Fragment key={m.id}>
-                        <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
-                          {cz(monthAmount(it, m, "budget"))}
-                        </td>
-                        <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
-                          {cz(monthAmount(it, m, "realized"))}
-                        </td>
-                      </React.Fragment>
-                    );
-                  })}
-                  <td className="px-2 py-2">
-                    <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
-                      <button className="btn-ghost px-1.5 py-1" onClick={() => onEditItem(it)} title="Edit">
-                        <Pencil size={14} />
-                      </button>
-                      <button className="btn-ghost px-1.5 py-1 text-rose-500" onClick={() => onDeleteItem(it)} title="Delete">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {/* leg total row */}
-            <tr className="bg-slate-100 dark:bg-slate-800">
-              <td className="sticky left-0 z-10 bg-slate-100 px-4 py-1.5 font-medium dark:bg-slate-800">TOTAL</td>
-              <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(legAgg.budget))}</td>
-              <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(legAgg.actual))}</td>
-              <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(legAgg.forecast))}</td>
-              <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${COL_W}`}>{fmt(conv(legAgg.total))}</td>
-              {monthTotals.map((mt, idx) => {
-                const zebra = (idx + 1) % 2 === 0;
-                return (
-                  <React.Fragment key={idx}>
-                    <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
-                      {cz(mt.b)}
-                    </td>
-                    <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
-                      {cz(mt.r)}
-                    </td>
-                  </React.Fragment>
-                );
-              })}
-              <td></td>
-            </tr>
+            {regular.map((it, i) => (
+              <ItemRow
+                key={it.id}
+                it={it}
+                agg={regAggs[i]}
+                cur={cur}
+                conv={conv}
+                isBaseCur={isBaseCur}
+                onEdit={() => onEditItem(it)}
+                onDelete={() => onDeleteItem(it)}
+                patchMonth={patchMonth}
+                saveMonth={saveMonth}
+              />
+            ))}
+            <TotalRow label="TOTAL" agg={budgetAgg} monthTotals={budgetMonths} conv={conv} />
+            {crs.map((it, i) => (
+              <ItemRow
+                key={it.id}
+                it={it}
+                agg={crAggs[i]}
+                cur={cur}
+                conv={conv}
+                isBaseCur={isBaseCur}
+                onEdit={() => onEditCR(it)}
+                onDelete={() => onDeleteCR(it)}
+                patchMonth={patchMonth}
+                saveMonth={saveMonth}
+              />
+            ))}
+            {crs.length > 0 && (
+              <TotalRow label="TOTAL with CRs" agg={withCrsAgg} monthTotals={withCrsMonths} conv={conv} />
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* change requests + total with CRs */}
-      <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-800">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Change requests
-          </span>
-          <button className="btn-ghost px-2 py-1 text-xs" onClick={onAddCR}>
-            <Plus size={14} /> Add CR
-          </button>
-        </div>
-        {leg.change_requests.length === 0 ? (
-          <div className="text-xs text-slate-400">No change requests.</div>
-        ) : (
-          <div className="space-y-1">
-            {leg.change_requests.map((cr) => (
-              <div key={cr.id} className="group flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                  {CR_KINDS.find((k) => k.id === cr.kind)?.label || cr.kind}
-                </span>
-                <span className="flex-1 truncate text-sm text-slate-600 dark:text-slate-300">{cr.label}</span>
-                <div className="text-right tabular-nums">
-                  <div className="font-semibold">{fmt(conv(num(cr.amount)))}</div>
-                </div>
-                <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
-                  <button className="btn-ghost px-1.5 py-1" onClick={() => onEditCR(cr)}>
-                    <Pencil size={14} />
-                  </button>
-                  <button className="btn-ghost px-1.5 py-1 text-rose-500" onClick={() => onDeleteCR(cr)}>
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="mt-3 flex items-center justify-between border-t border-dashed border-slate-200 pt-3 dark:border-slate-700">
-          <span className="text-sm font-bold">TOTAL with CRs</span>
-          <div className="text-right tabular-nums">
-            <div className="font-bold">{fmt(conv(legAgg.budget + crTotal))}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-slate-100 px-4 py-2 dark:border-slate-800">
+      <div className="flex flex-col items-start gap-0.5 border-t border-slate-100 px-4 py-2 dark:border-slate-800">
         <button className="btn-ghost text-xs" onClick={onAddItem}>
           <Plus size={14} /> Add budget item
         </button>
+        <button className="btn-ghost text-xs" onClick={onAddCR}>
+          <Plus size={14} /> Add CR
+        </button>
       </div>
     </div>
+  );
+}
+
+// one row in the grid — used for both regular budget items and CR rows
+function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, saveMonth }) {
+  const a = agg;
+  const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
+  return (
+    <tr className="group hover:bg-slate-100 dark:hover:bg-slate-800">
+      <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-4 py-1.5 font-medium dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800">
+        {it.is_cr && (
+          <span className="mr-2 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            {CR_KINDS.find((k) => k.id === it.cr_kind)?.label || "CR"}
+          </span>
+        )}
+        {it.name || "—"}
+        {it.item_type === "manday" && (
+          <span className="ml-2 text-[11px] font-normal text-slate-400">
+            {fmt(conv(it.daily_rate))} {cur}/d
+          </span>
+        )}
+      </td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(a.actual))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
+      <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${COL_W}`}>{fmt(conv(a.total))}</td>
+      {it.months.map((m) => {
+        const zebra = m.month % 2 === 0;
+        if (isBaseCur) {
+          return (
+            <React.Fragment key={m.id}>
+              <MoneyInput
+                value={m.budget_value}
+                zebra={zebra}
+                onCommit={(v) => {
+                  patchMonth(m.id, "budget", v);
+                  saveMonth(m.id, "budget", v);
+                }}
+              />
+              <MoneyInput
+                value={m.realized_value}
+                zebra={zebra}
+                onCommit={(v) => {
+                  patchMonth(m.id, "realized", v);
+                  saveMonth(m.id, "realized", v);
+                }}
+              />
+            </React.Fragment>
+          );
+        }
+        return (
+          <React.Fragment key={m.id}>
+            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
+              {cz(monthAmount(it, m, "budget"))}
+            </td>
+            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
+              {cz(monthAmount(it, m, "realized"))}
+            </td>
+          </React.Fragment>
+        );
+      })}
+      <td className="px-2 py-1.5">
+        <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+          <button className="btn-ghost px-1.5 py-1" onClick={onEdit} title="Edit">
+            <Pencil size={14} />
+          </button>
+          <button className="btn-ghost px-1.5 py-1 text-rose-500" onClick={onDelete} title="Delete">
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// the TOTAL and TOTAL with CRs summary rows
+function TotalRow({ label, agg, monthTotals, conv }) {
+  const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
+  return (
+    <tr className="bg-slate-100 dark:bg-slate-800">
+      <td className="sticky left-0 z-10 bg-slate-100 px-4 py-1.5 font-medium dark:bg-slate-800">{label}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.budget))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(agg.actual))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
+      <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${COL_W}`}>{fmt(conv(agg.total))}</td>
+      {monthTotals.map((mt, idx) => {
+        const zebra = (idx + 1) % 2 === 0;
+        return (
+          <React.Fragment key={idx}>
+            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.b)}</td>
+            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.r)}</td>
+          </React.Fragment>
+        );
+      })}
+      <td></td>
+    </tr>
   );
 }
 
@@ -830,9 +828,11 @@ function LegModal({ ctx, categories, onClose, onOpenSetup, onSaved }) {
 function ItemModal({ ctx, codes, onClose, onSaved }) {
   const it = ctx.item;
   const editing = !!it;
+  const isCr = ctx.isCr || it?.is_cr || false;
   const [name, setName] = useState(it?.name || "");
   const [isManday, setIsManday] = useState(it?.item_type === "manday");
   const [rate, setRate] = useState(it?.daily_rate ?? 0);
+  const [crKind, setCrKind] = useState(it?.cr_kind || "cr");
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -842,6 +842,8 @@ function ItemModal({ ctx, codes, onClose, onSaved }) {
         name: name.trim(),
         item_type: isManday ? "manday" : "fixed",
         daily_rate: isManday ? num(rate) : 0,
+        is_cr: isCr,
+        cr_kind: isCr ? crKind : "",
       };
       if (editing) await api.updateItem(it.id, payload);
       else await api.createItem(ctx.legId, payload);
@@ -851,11 +853,13 @@ function ItemModal({ ctx, codes, onClose, onSaved }) {
     }
   }
 
+  const noun = isCr ? "change request" : "budget item";
+
   return (
     <Modal
       open
       onClose={onClose}
-      title={editing ? "Edit budget item" : "New budget item"}
+      title={editing ? `Edit ${noun}` : `New ${noun}`}
       footer={
         <>
           <button className="btn-subtle" onClick={onClose}>Cancel</button>
@@ -864,7 +868,16 @@ function ItemModal({ ctx, codes, onClose, onSaved }) {
       }
     >
       <div className="space-y-4">
-        <Field label="Item title">
+        {isCr && (
+          <Field label="Kind">
+            <select className="input" value={crKind} onChange={(e) => setCrKind(e.target.value)}>
+              {CR_KINDS.map((k) => (
+                <option key={k.id} value={k.id}>{k.label}</option>
+              ))}
+            </select>
+          </Field>
+        )}
+        <Field label={isCr ? "Change request title" : "Item title"}>
           <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
         </Field>
         <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
@@ -892,58 +905,6 @@ function ItemModal({ ctx, codes, onClose, onSaved }) {
         <p className="text-xs text-slate-500">
           After saving, enter the monthly Budget and Actual/Forecast values directly in the row.
         </p>
-      </div>
-    </Modal>
-  );
-}
-
-// ----------------------------------------------------------------- CR modal
-function CRModal({ ctx, codes, onClose, onSaved }) {
-  const cr = ctx.cr;
-  const editing = !!cr;
-  const [kind, setKind] = useState(cr?.kind || "cr");
-  const [label, setLabel] = useState(cr?.label || "");
-  const [amount, setAmount] = useState(cr?.amount ?? 0);
-  const [busy, setBusy] = useState(false);
-
-  async function save() {
-    setBusy(true);
-    try {
-      const payload = { kind, label: label.trim(), amount: num(amount) };
-      if (editing) await api.updateCR(cr.id, payload);
-      else await api.createCR(ctx.legId, payload);
-      onSaved();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={editing ? "Edit change request" : "New change request"}
-      footer={
-        <>
-          <button className="btn-subtle" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={save} disabled={busy}>Save</button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <Field label="Kind">
-          <select className="input" value={kind} onChange={(e) => setKind(e.target.value)}>
-            {CR_KINDS.map((k) => (
-              <option key={k.id} value={k.id}>{k.label}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Label">
-          <input className="input" value={label} placeholder="Optional note" onChange={(e) => setLabel(e.target.value)} />
-        </Field>
-        <Field label={`Amount (${codes.base}, can be negative)`}>
-          <input className="input" type="number" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </Field>
       </div>
     </Modal>
   );

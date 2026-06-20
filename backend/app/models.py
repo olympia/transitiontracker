@@ -248,6 +248,9 @@ class BudgetItem(Base):
     item_type: Mapped[str] = mapped_column(String(20), default="fixed")  # fixed | manday
     # daily rate (base currency) for manday-type items
     daily_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    # change-request rows live in the same table, flagged and kinded
+    is_cr: Mapped[bool] = mapped_column(Boolean, default=False)
+    cr_kind: Mapped[str] = mapped_column(String(30), default="")  # carry_over|reallocation|cancelation|cr
 
     leg: Mapped["WbsLeg"] = relationship(back_populates="items")
     months: Mapped[list["BudgetMonth"]] = relationship(

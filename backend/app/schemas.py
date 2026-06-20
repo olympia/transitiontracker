@@ -236,6 +236,8 @@ class BudgetItemBase(BaseModel):
     name: str = ""
     item_type: str = "fixed"  # fixed | manday
     daily_rate: float = 0.0
+    is_cr: bool = False
+    cr_kind: str = ""  # carry_over | reallocation | cancelation | cr
     position: int = 0
 
 
@@ -247,6 +249,8 @@ class BudgetItemUpdate(BaseModel):
     name: str | None = None
     item_type: str | None = None
     daily_rate: float | None = None
+    is_cr: bool | None = None
+    cr_kind: str | None = None
     position: int | None = None
 
 
