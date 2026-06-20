@@ -20,7 +20,7 @@ const MONTHS = [
 const CR_KINDS = [
   { id: "carry_over", label: "Carry Over" },
   { id: "reallocation", label: "Budget Reallocation" },
-  { id: "cancelation", label: "Budget Cancelation" },
+  { id: "cancelation", label: "Budget Cancellation" },
   { id: "cr", label: "CR" },
 ];
 
@@ -835,13 +835,17 @@ function ItemModal({ ctx, codes, onClose, onSaved }) {
   const [crKind, setCrKind] = useState(it?.cr_kind || "cr");
   const [busy, setBusy] = useState(false);
 
+  // CRs are always fixed amounts; only the "CR" kind carries a free title
+  const showTitle = !isCr || crKind === "cr";
+  const useManday = !isCr && isManday;
+
   async function save() {
     setBusy(true);
     try {
       const payload = {
-        name: name.trim(),
-        item_type: isManday ? "manday" : "fixed",
-        daily_rate: isManday ? num(rate) : 0,
+        name: showTitle ? name.trim() : "",
+        item_type: useManday ? "manday" : "fixed",
+        daily_rate: useManday ? num(rate) : 0,
         is_cr: isCr,
         cr_kind: isCr ? crKind : "",
       };
@@ -870,40 +874,46 @@ function ItemModal({ ctx, codes, onClose, onSaved }) {
       <div className="space-y-4">
         {isCr && (
           <Field label="Kind">
-            <select className="input" value={crKind} onChange={(e) => setCrKind(e.target.value)}>
+            <select className="input" value={crKind} autoFocus onChange={(e) => setCrKind(e.target.value)}>
               {CR_KINDS.map((k) => (
                 <option key={k.id} value={k.id}>{k.label}</option>
               ))}
             </select>
           </Field>
         )}
-        <Field label={isCr ? "Change request title" : "Item title"}>
-          <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
-          <div>
-            <div className="text-sm font-semibold">Manday based</div>
-            <div className="text-xs text-slate-500">
-              {isManday
-                ? `Monthly value = manday × daily rate (${codes.base})`
-                : `Monthly value = fixed amount in ${codes.base}`}
-            </div>
-          </div>
-          <Toggle checked={isManday} onChange={setIsManday} />
-        </div>
-        {isManday && (
-          <Field label={`Daily rate (${codes.base})`}>
-            <input
-              className="input"
-              type="number"
-              step="any"
-              value={rate}
-              onChange={(e) => setRate(e.target.value)}
-            />
+        {showTitle && (
+          <Field label={isCr ? "Change request title" : "Item title"}>
+            <input className="input" value={name} autoFocus={!isCr} onChange={(e) => setName(e.target.value)} />
           </Field>
         )}
+        {!isCr && (
+          <>
+            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
+              <div>
+                <div className="text-sm font-semibold">Manday based</div>
+                <div className="text-xs text-slate-500">
+                  {isManday
+                    ? `Monthly value = manday × daily rate (${codes.base})`
+                    : `Monthly value = fixed amount in ${codes.base}`}
+                </div>
+              </div>
+              <Toggle checked={isManday} onChange={setIsManday} />
+            </div>
+            {isManday && (
+              <Field label={`Daily rate (${codes.base})`}>
+                <input
+                  className="input"
+                  type="number"
+                  step="any"
+                  value={rate}
+                  onChange={(e) => setRate(e.target.value)}
+                />
+              </Field>
+            )}
+          </>
+        )}
         <p className="text-xs text-slate-500">
-          After saving, enter the monthly Budget and Actual/Forecast values directly in the row.
+          After saving, enter the monthly {isCr ? "amounts" : "Budget and Actual/Forecast values"} directly in the row.
         </p>
       </div>
     </Modal>
