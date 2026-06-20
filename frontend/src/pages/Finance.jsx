@@ -23,14 +23,20 @@ const CR_KINDS = [
   { id: "cr", label: "CR" },
 ];
 
+// Hungarian style: space thousands separator, comma decimal. Integers show no
+// decimals; fractional values are rounded to 2 places.
 function fmt(n) {
   if (n === null || n === undefined || isNaN(n)) return "—";
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-    Math.round(n)
-  );
+  const r = Math.round(n * 100) / 100;
+  const dec = Number.isInteger(r) ? 0 : 2;
+  return new Intl.NumberFormat("hu-HU", {
+    minimumFractionDigits: dec,
+    maximumFractionDigits: dec,
+  }).format(r);
 }
 
 function num(v) {
+  if (typeof v === "string") v = v.replace(/\s/g, "").replace(",", ".");
   const n = Number(v);
   return isNaN(n) ? 0 : n;
 }
@@ -473,7 +479,7 @@ function LegCard({
                 <th
                   key={mn}
                   colSpan={2}
-                  className={`px-2 py-1 text-center ${idx + 1 >= cutoff ? "text-brand-500" : ""}`}
+                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? "bg-slate-50/70 dark:bg-slate-800/30 " : ""}${idx + 1 >= cutoff ? "text-brand-500" : ""}`}
                 >
                   {mn}
                 </th>
@@ -481,14 +487,17 @@ function LegCard({
               <th rowSpan={2}></th>
             </tr>
             <tr className="text-[10px] font-semibold uppercase text-slate-400">
-              {MONTHS.map((mn, idx) => (
-                <React.Fragment key={mn}>
-                  <th className="px-1 py-1 text-center font-medium">B</th>
-                  <th className="px-1 py-1 text-center font-medium text-brand-500">
-                    {idx + 1 < cutoff ? "A" : "FC"}
-                  </th>
-                </React.Fragment>
-              ))}
+              {MONTHS.map((mn, idx) => {
+                const z = (idx + 1) % 2 === 0 ? "bg-slate-50/70 dark:bg-slate-800/30 " : "";
+                return (
+                  <React.Fragment key={mn}>
+                    <th className={`${z}px-1 py-1 text-center font-medium`}>B</th>
+                    <th className={`${z}px-1 py-1 text-center font-medium text-brand-500`}>
+                      {idx + 1 < cutoff ? "A" : "FC"}
+                    </th>
+                  </React.Fragment>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -515,21 +524,30 @@ function LegCard({
                   <td className="px-3 py-2 text-right tabular-nums">{fmt(a.actual)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmt(a.forecast)}</td>
                   <td className="px-3 py-2 text-right font-bold tabular-nums">{fmt(a.total)}</td>
-                  {it.months.map((m) => (
-                    <React.Fragment key={m.id}>
-                      <MonthInput
-                        value={m.budget_value}
-                        onChange={(v) => patchMonth(m.id, "budget", v)}
-                        onBlur={(v) => saveMonth(m.id, "budget", v)}
-                      />
-                      <MonthInput
-                        value={m.realized_value}
-                        forecast={m.month >= cutoff}
-                        onChange={(v) => patchMonth(m.id, "realized", v)}
-                        onBlur={(v) => saveMonth(m.id, "realized", v)}
-                      />
-                    </React.Fragment>
-                  ))}
+                  {it.months.map((m) => {
+                    const zebra = m.month % 2 === 0;
+                    return (
+                      <React.Fragment key={m.id}>
+                        <MoneyInput
+                          value={m.budget_value}
+                          zebra={zebra}
+                          onCommit={(v) => {
+                            patchMonth(m.id, "budget", v);
+                            saveMonth(m.id, "budget", v);
+                          }}
+                        />
+                        <MoneyInput
+                          value={m.realized_value}
+                          forecast={m.month >= cutoff}
+                          zebra={zebra}
+                          onCommit={(v) => {
+                            patchMonth(m.id, "realized", v);
+                            saveMonth(m.id, "realized", v);
+                          }}
+                        />
+                      </React.Fragment>
+                    );
+                  })}
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
                       <button className="btn-ghost px-1.5 py-1" onClick={() => onEditItem(it)} title="Edit">
@@ -616,19 +634,33 @@ function LegCard({
   );
 }
 
-function MonthInput({ value, onChange, onBlur, forecast }) {
+function MoneyInput({ value, onCommit, forecast, zebra }) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+  const display = focused
+    ? draft
+    : num(value) === 0
+    ? ""
+    : fmt(num(value));
   return (
-    <td className="px-0.5 py-1">
+    <td className={`px-1 py-1 ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
       <input
-        className={`h-8 w-[64px] rounded-md border border-slate-200 bg-white px-1.5 text-right text-xs tabular-nums outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 ${
+        className={`h-8 w-[120px] rounded-md border border-slate-200 bg-white px-2 text-right text-[13px] tabular-nums outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 ${
           forecast ? "text-brand-600 dark:text-brand-300" : ""
         }`}
-        type="number"
-        step="any"
-        value={value === 0 || value === "0" ? "" : value}
+        type="text"
+        inputMode="decimal"
+        value={display}
         placeholder="0"
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={(e) => onBlur(e.target.value)}
+        onFocus={() => {
+          setDraft(num(value) === 0 ? "" : String(value));
+          setFocused(true);
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          setFocused(false);
+          onCommit(num(draft));
+        }}
       />
     </td>
   );
