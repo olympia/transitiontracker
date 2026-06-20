@@ -78,6 +78,18 @@ function aggItem(item, cutoff) {
   return { budget, actual, forecast, total: actual + forecast };
 }
 
+// Pick which year tab to open: the current calendar year if present; otherwise
+// the latest year if we're past it, or the earliest if we're before all of them.
+function pickDefaultYear(list) {
+  if (!list.length) return null;
+  const cy = new Date().getFullYear();
+  const exact = list.find((y) => y.year === cy);
+  if (exact) return exact.id;
+  const minY = list.reduce((a, y) => (y.year < a.year ? y : a), list[0]);
+  const maxY = list.reduce((a, y) => (y.year > a.year ? y : a), list[0]);
+  return cy > maxY.year ? maxY.id : minY.id;
+}
+
 function sumAgg(list) {
   return list.reduce(
     (a, x) => ({
@@ -110,7 +122,7 @@ export default function Finance({ project, onProjectChange }) {
     setYearId((cur) => {
       const target = selectId ?? cur;
       if (target && list.some((y) => y.id === target)) return target;
-      return list[0]?.id ?? null;
+      return pickDefaultYear(list);
     });
   }
 
