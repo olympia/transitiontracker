@@ -7,13 +7,14 @@ import {
   Trash2,
   Calendar,
   Layers,
+  Coins,
 } from "lucide-react";
 import { api } from "../api";
 import { Spinner, EmptyState, Modal, Field, Toggle } from "../components/ui.jsx";
 
 const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
 const CR_KINDS = [
@@ -99,6 +100,9 @@ export default function Finance({ project, onProjectChange }) {
   const [itemEdit, setItemEdit] = useState(null); // { legId, item }
   const [crEdit, setCrEdit] = useState(null);
   const [legEdit, setLegEdit] = useState(null);
+  const [displayCur, setDisplayCur] = useState(
+    () => localStorage.getItem("tt-fin-cur") || ""
+  );
 
   async function loadYears(selectId) {
     const list = await api.listYears(project.id);
@@ -156,6 +160,22 @@ export default function Finance({ project, onProjectChange }) {
   );
   const cutoff = data?.year.forecast_from_month ?? 1;
 
+  // currencies available in the selector: base + configured reporting ones
+  const currencyOptions = useMemo(
+    () => [codes.base, codes.rep1, codes.rep2].filter(Boolean),
+    [codes]
+  );
+  // effective display currency (fall back to base if the saved one is gone)
+  const cur = currencyOptions.includes(displayCur) ? displayCur : codes.base;
+  // divisor to convert a base amount into the display currency for this year
+  const curFactor =
+    cur === codes.base ? 1 : cur === codes.rep1 ? rates.r1 : cur === codes.rep2 ? rates.r2 : 1;
+  const isBaseCur = cur === codes.base;
+
+  useEffect(() => {
+    if (cur) localStorage.setItem("tt-fin-cur", cur);
+  }, [cur]);
+
   // live local edit of a month value (keeps aggregates instant)
   function patchMonth(monthId, field, value) {
     setData((d) => {
@@ -187,15 +207,38 @@ export default function Finance({ project, onProjectChange }) {
             <Wallet size={20} className="text-brand-600" /> Budget details
           </h2>
           <p className="text-sm text-slate-500">
-            SAP WBS legs and budget items per year, in {codes.base || "base currency"}
-            {codes.rep1 ? ` · ${codes.rep1}` : ""}
-            {codes.rep2 ? ` · ${codes.rep2}` : ""}.
+            SAP WBS legs and budget items per year. Booked in {codes.base || "base currency"}
+            {isBaseCur ? "" : `, shown in ${cur}`}.
           </p>
         </div>
-        <button className="btn-subtle" onClick={() => setSettingsOpen(true)}>
-          <Settings2 size={16} /> Setup
-        </button>
+        <div className="flex items-center gap-2">
+          {currencyOptions.length > 1 && (
+            <label className="flex items-center gap-1.5 text-sm">
+              <Coins size={16} className="text-slate-400" />
+              <select
+                className="input h-9 py-0"
+                value={cur}
+                onChange={(e) => setDisplayCur(e.target.value)}
+              >
+                {currencyOptions.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                    {c === codes.base ? " (base)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <button className="btn-subtle" onClick={() => setSettingsOpen(true)}>
+            <Settings2 size={16} /> Setup
+          </button>
+        </div>
       </div>
+      {!isBaseCur && curFactor === 0 && (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+          No {cur} rate set for {data?.year.year}. Set it in Setup to see converted values.
+        </div>
+      )}
 
       {years.length === 0 ? (
         <EmptyState
@@ -234,6 +277,9 @@ export default function Finance({ project, onProjectChange }) {
               codes={codes}
               rates={rates}
               cutoff={cutoff}
+              cur={cur}
+              curFactor={curFactor}
+              isBaseCur={isBaseCur}
               onAddLeg={() => setLegEdit({ yearId: data.year.id, leg: null })}
               onEditLeg={(leg) => setLegEdit({ yearId: data.year.id, leg })}
               onAddItem={(legId) => setItemEdit({ legId, item: null })}
@@ -310,6 +356,9 @@ function YearGrid({
   codes,
   rates,
   cutoff,
+  cur,
+  curFactor,
+  isBaseCur,
   onAddLeg,
   onEditLeg,
   onAddItem,
@@ -320,7 +369,9 @@ function YearGrid({
   saveMonth,
   reload,
 }) {
-  // year-level totals
+  // convert a base amount into the display currency (null if no rate)
+  const conv = (b) => (curFactor ? b / curFactor : null);
+
   const legAggs = data.legs.map((leg) => sumAgg(leg.items.map((it) => aggItem(it, cutoff))));
   const yearAgg = sumAgg(legAggs);
   const crTotal = data.legs.reduce(
@@ -331,21 +382,10 @@ function YearGrid({
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label="Budget" base={yearAgg.budget} rates={rates} codes={codes} />
-        <SummaryCard
-          label="Budget with CRs"
-          base={yearAgg.budget + crTotal}
-          rates={rates}
-          codes={codes}
-          accent
-        />
-        <SummaryCard label="Actual" base={yearAgg.actual} rates={rates} codes={codes} />
-        <SummaryCard
-          label="Total (Actual + FC)"
-          base={yearAgg.total}
-          rates={rates}
-          codes={codes}
-        />
+        <SummaryCard label="Budget" base={yearAgg.budget} conv={conv} cur={cur} />
+        <SummaryCard label="Budget with CRs" base={yearAgg.budget + crTotal} conv={conv} cur={cur} accent />
+        <SummaryCard label="Actual" base={yearAgg.actual} conv={conv} cur={cur} />
+        <SummaryCard label="Total (Actual + FC)" base={yearAgg.total} conv={conv} cur={cur} />
       </div>
 
       {data.legs.length === 0 ? (
@@ -365,9 +405,10 @@ function YearGrid({
             <LegCard
               key={leg.id}
               leg={leg}
-              codes={codes}
-              rates={rates}
               cutoff={cutoff}
+              cur={cur}
+              conv={conv}
+              isBaseCur={isBaseCur}
               onEditLeg={() => onEditLeg(leg)}
               onDeleteLeg={async () => {
                 if (window.confirm(`Delete WBS leg "${leg.code || leg.name}" and all its items?`)) {
@@ -400,47 +441,30 @@ function YearGrid({
   );
 }
 
-function SummaryCard({ label, base, rates, codes, accent }) {
+function SummaryCard({ label, base, conv, cur, accent }) {
   return (
     <div className="card px-4 py-3">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </div>
       <div className={`mt-1 text-2xl font-extrabold tabular-nums ${accent ? "text-emerald-600" : ""}`}>
-        {fmt(base)}
+        {fmt(conv(base))}
       </div>
-      <div className="text-xs font-medium text-slate-400">
-        {codes.base}
-        {codes.rep1 && rates.r1 ? ` · ${fmt(base / rates.r1)} ${codes.rep1}` : ""}
-        {codes.rep2 && rates.r2 ? ` · ${fmt(base / rates.r2)} ${codes.rep2}` : ""}
-      </div>
+      <div className="text-xs font-medium text-slate-400">{cur}</div>
     </div>
   );
 }
 
-// reporting-currency sub-lines for a base amount (used in totals)
-function RepLines({ base, rates, codes }) {
-  return (
-    <>
-      {codes.rep1 && rates.r1 ? (
-        <div className="text-[11px] font-medium text-slate-400">
-          {fmt(base / rates.r1)} {codes.rep1}
-        </div>
-      ) : null}
-      {codes.rep2 && rates.r2 ? (
-        <div className="text-[11px] font-medium text-slate-400">
-          {fmt(base / rates.r2)} {codes.rep2}
-        </div>
-      ) : null}
-    </>
-  );
-}
+// zebra background for an aggregate block (Budget/Actual/Forecast/Total) so the
+// four blocks read as separate columns, mirroring the Excel layout
+const AGG_ZEBRA = "bg-slate-50/70 dark:bg-slate-800/30";
 
 function LegCard({
   leg,
-  codes,
-  rates,
   cutoff,
+  cur,
+  conv,
+  isBaseCur,
   onEditLeg,
   onDeleteLeg,
   onAddItem,
@@ -455,6 +479,22 @@ function LegCard({
   const itemAggs = leg.items.map((it) => aggItem(it, cutoff));
   const legAgg = sumAgg(itemAggs);
   const crTotal = leg.change_requests.reduce((s, c) => s + num(c.amount), 0);
+  // per-month totals across all items (base currency)
+  const monthTotals = MONTHS.map((_, idx) => {
+    const month = idx + 1;
+    let b = 0;
+    let r = 0;
+    for (const it of leg.items) {
+      const mm = it.months.find((x) => x.month === month);
+      if (mm) {
+        b += monthAmount(it, mm, "budget");
+        r += monthAmount(it, mm, "realized");
+      }
+    }
+    return { b, r };
+  });
+  // converted cell value, blank for zero
+  const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
 
   return (
     <div className="card overflow-hidden">
@@ -487,15 +527,15 @@ function LegCard({
               <th rowSpan={2} className="sticky left-0 z-10 bg-white px-4 py-2 text-left dark:bg-slate-900">
                 Item
               </th>
-              <th rowSpan={2} className="px-3 py-2 text-right">Budget</th>
+              <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_ZEBRA}`}>Budget</th>
               <th rowSpan={2} className="px-3 py-2 text-right">Actual</th>
-              <th rowSpan={2} className="px-3 py-2 text-right">Forecast</th>
-              <th rowSpan={2} className="px-3 py-2 text-right">Total</th>
+              <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_ZEBRA}`}>Forecast</th>
+              <th rowSpan={2} className="border-r border-slate-200 px-3 py-2 text-right dark:border-slate-700">Total</th>
               {MONTHS.map((mn, idx) => (
                 <th
                   key={mn}
                   colSpan={2}
-                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? "bg-slate-50/70 dark:bg-slate-800/30 " : ""}${idx + 1 >= cutoff ? "text-brand-500" : ""}`}
+                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? AGG_ZEBRA + " " : ""}${idx + 1 >= cutoff ? "text-brand-500" : ""}`}
                 >
                   {mn}
                 </th>
@@ -504,7 +544,7 @@ function LegCard({
             </tr>
             <tr className="text-[10px] font-semibold uppercase text-slate-400">
               {MONTHS.map((mn, idx) => {
-                const z = (idx + 1) % 2 === 0 ? "bg-slate-50/70 dark:bg-slate-800/30 " : "";
+                const z = (idx + 1) % 2 === 0 ? AGG_ZEBRA + " " : "";
                 return (
                   <React.Fragment key={mn}>
                     <th className={`${z}px-1 py-1 text-center font-medium`}>Budget</th>
@@ -532,35 +572,47 @@ function LegCard({
                     <div className="whitespace-nowrap font-medium">{it.name || "—"}</div>
                     <div className="text-[11px] text-slate-400">
                       {it.item_type === "manday"
-                        ? `manday × ${fmt(it.daily_rate)} ${codes.base}`
+                        ? `manday × ${fmt(conv(it.daily_rate))} ${cur}`
                         : "fixed"}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmt(a.budget)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmt(a.actual)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmt(a.forecast)}</td>
-                  <td className="px-3 py-2 text-right font-bold tabular-nums">{fmt(a.total)}</td>
+                  <td className={`px-3 py-2 text-right font-semibold tabular-nums ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmt(conv(a.actual))}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
+                  <td className="border-r border-slate-200 px-3 py-2 text-right font-bold tabular-nums dark:border-slate-700">{fmt(conv(a.total))}</td>
                   {it.months.map((m) => {
                     const zebra = m.month % 2 === 0;
+                    if (isBaseCur) {
+                      return (
+                        <React.Fragment key={m.id}>
+                          <MoneyInput
+                            value={m.budget_value}
+                            zebra={zebra}
+                            onCommit={(v) => {
+                              patchMonth(m.id, "budget", v);
+                              saveMonth(m.id, "budget", v);
+                            }}
+                          />
+                          <MoneyInput
+                            value={m.realized_value}
+                            forecast={m.month >= cutoff}
+                            zebra={zebra}
+                            onCommit={(v) => {
+                              patchMonth(m.id, "realized", v);
+                              saveMonth(m.id, "realized", v);
+                            }}
+                          />
+                        </React.Fragment>
+                      );
+                    }
                     return (
                       <React.Fragment key={m.id}>
-                        <MoneyInput
-                          value={m.budget_value}
-                          zebra={zebra}
-                          onCommit={(v) => {
-                            patchMonth(m.id, "budget", v);
-                            saveMonth(m.id, "budget", v);
-                          }}
-                        />
-                        <MoneyInput
-                          value={m.realized_value}
-                          forecast={m.month >= cutoff}
-                          zebra={zebra}
-                          onCommit={(v) => {
-                            patchMonth(m.id, "realized", v);
-                            saveMonth(m.id, "realized", v);
-                          }}
-                        />
+                        <td className={`px-2 py-2 text-right text-[13px] tabular-nums text-slate-500 ${zebra ? AGG_ZEBRA : ""}`}>
+                          {cz(monthAmount(it, m, "budget"))}
+                        </td>
+                        <td className={`px-2 py-2 text-right text-[13px] tabular-nums ${m.month >= cutoff ? "text-brand-600 dark:text-brand-300" : "text-slate-500"} ${zebra ? AGG_ZEBRA : ""}`}>
+                          {cz(monthAmount(it, m, "realized"))}
+                        </td>
                       </React.Fragment>
                     );
                   })}
@@ -580,17 +632,24 @@ function LegCard({
             {/* leg total row */}
             <tr className="bg-slate-50 font-semibold dark:bg-slate-800/50">
               <td className="sticky left-0 z-10 bg-slate-50 px-4 py-2 dark:bg-slate-800/50">TOTAL</td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {fmt(legAgg.budget)}
-                <RepLines base={legAgg.budget} rates={rates} codes={codes} />
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">{fmt(legAgg.actual)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{fmt(legAgg.forecast)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {fmt(legAgg.total)}
-                <RepLines base={legAgg.total} rates={rates} codes={codes} />
-              </td>
-              <td colSpan={25}></td>
+              <td className={`px-3 py-2 text-right tabular-nums ${AGG_ZEBRA}`}>{fmt(conv(legAgg.budget))}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{fmt(conv(legAgg.actual))}</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${AGG_ZEBRA}`}>{fmt(conv(legAgg.forecast))}</td>
+              <td className="border-r border-slate-200 px-3 py-2 text-right tabular-nums dark:border-slate-700">{fmt(conv(legAgg.total))}</td>
+              {monthTotals.map((mt, idx) => {
+                const zebra = (idx + 1) % 2 === 0;
+                return (
+                  <React.Fragment key={idx}>
+                    <td className={`px-2 py-2 text-right text-[13px] tabular-nums ${zebra ? AGG_ZEBRA : ""}`}>
+                      {cz(mt.b)}
+                    </td>
+                    <td className={`px-2 py-2 text-right text-[13px] tabular-nums ${idx + 1 >= cutoff ? "text-brand-600 dark:text-brand-300" : ""} ${zebra ? AGG_ZEBRA : ""}`}>
+                      {cz(mt.r)}
+                    </td>
+                  </React.Fragment>
+                );
+              })}
+              <td></td>
             </tr>
           </tbody>
         </table>
@@ -617,8 +676,7 @@ function LegCard({
                 </span>
                 <span className="flex-1 truncate text-sm text-slate-600 dark:text-slate-300">{cr.label}</span>
                 <div className="text-right tabular-nums">
-                  <div className="font-semibold">{fmt(num(cr.amount))}</div>
-                  <RepLines base={num(cr.amount)} rates={rates} codes={codes} />
+                  <div className="font-semibold">{fmt(conv(num(cr.amount)))}</div>
                 </div>
                 <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
                   <button className="btn-ghost px-1.5 py-1" onClick={() => onEditCR(cr)}>
@@ -635,8 +693,7 @@ function LegCard({
         <div className="mt-3 flex items-center justify-between border-t border-dashed border-slate-200 pt-3 dark:border-slate-700">
           <span className="text-sm font-bold">TOTAL with CRs</span>
           <div className="text-right tabular-nums">
-            <div className="font-bold">{fmt(legAgg.budget + crTotal)}</div>
-            <RepLines base={legAgg.budget + crTotal} rates={rates} codes={codes} />
+            <div className="font-bold">{fmt(conv(legAgg.budget + crTotal))}</div>
           </div>
         </div>
       </div>
