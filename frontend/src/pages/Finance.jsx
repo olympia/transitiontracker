@@ -41,6 +41,22 @@ function num(v) {
   return isNaN(n) ? 0 : n;
 }
 
+// group the integer part live while typing (space thousands, comma decimal)
+function fmtDraft(raw) {
+  if (raw === null || raw === undefined) return "";
+  let s = String(raw).replace(/\s/g, "").replace(".", ",");
+  const neg = s.startsWith("-");
+  if (neg) s = s.slice(1);
+  s = s.replace(/[^\d,]/g, "");
+  const parts = s.split(",");
+  const intp = parts[0].replace(/^0+(?=\d)/, "");
+  const grouped =
+    intp === "" ? "" : new Intl.NumberFormat("hu-HU").format(parseInt(intp, 10));
+  let out = grouped;
+  if (parts.length > 1) out += "," + parts[1].slice(0, 2);
+  return (neg ? "-" : "") + out;
+}
+
 // base amount for one month of an item, for a given field ('budget'|'realized')
 function monthAmount(item, m, field) {
   const v = num(m[`${field}_value`]);
@@ -491,9 +507,9 @@ function LegCard({
                 const z = (idx + 1) % 2 === 0 ? "bg-slate-50/70 dark:bg-slate-800/30 " : "";
                 return (
                   <React.Fragment key={mn}>
-                    <th className={`${z}px-1 py-1 text-center font-medium`}>B</th>
+                    <th className={`${z}px-1 py-1 text-center font-medium`}>Budget</th>
                     <th className={`${z}px-1 py-1 text-center font-medium text-brand-500`}>
-                      {idx + 1 < cutoff ? "A" : "FC"}
+                      {idx + 1 < cutoff ? "Actual" : "Forecast"}
                     </th>
                   </React.Fragment>
                 );
@@ -653,10 +669,10 @@ function MoneyInput({ value, onCommit, forecast, zebra }) {
         value={display}
         placeholder="0"
         onFocus={() => {
-          setDraft(num(value) === 0 ? "" : String(value));
+          setDraft(num(value) === 0 ? "" : fmtDraft(String(value)));
           setFocused(true);
         }}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => setDraft(fmtDraft(e.target.value))}
         onBlur={() => {
           setFocused(false);
           onCommit(num(draft));
