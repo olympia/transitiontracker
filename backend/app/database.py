@@ -91,6 +91,18 @@ def _run_migrations() -> None:
         # financial tracker: monthly model
         "ALTER TABLE financial_years ADD COLUMN IF NOT EXISTS forecast_from_month INT NOT NULL DEFAULT 1",
         "ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS daily_rate DOUBLE NOT NULL DEFAULT 0",
+        # drop the obsolete item-level amount/manday columns from the first
+        # (scrapped) design; they were created NOT NULL and now block inserts
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS responsible",
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS budget_amount",
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS actual_amount",
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS forecast_amount",
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS budget_manday",
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS budget_rate",
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS actual_manday",
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS actual_rate",
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS forecast_manday",
+        "ALTER TABLE budget_items DROP COLUMN IF EXISTS forecast_rate",
     ]
     with engine.connect() as conn:
         for stmt in statements:
