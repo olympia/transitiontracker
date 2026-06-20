@@ -591,10 +591,10 @@ function LegCard({
                       </span>
                     )}
                   </td>
-                  <td className={`px-3 py-1.5 text-right font-semibold tabular-nums ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
-                  <td className={`px-3 py-1.5 text-right tabular-nums ${COL_W}`}>{fmt(conv(a.actual))}</td>
-                  <td className={`px-3 py-1.5 text-right tabular-nums ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
-                  <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-bold tabular-nums dark:border-slate-700 ${COL_W}`}>{fmt(conv(a.total))}</td>
+                  <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
+                  <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(a.actual))}</td>
+                  <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
+                  <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${COL_W}`}>{fmt(conv(a.total))}</td>
                   {it.months.map((m) => {
                     const zebra = m.month % 2 === 0;
                     if (isBaseCur) {
@@ -622,10 +622,10 @@ function LegCard({
                     }
                     return (
                       <React.Fragment key={m.id}>
-                        <td className={`px-3 py-1.5 text-right text-[13px] tabular-nums text-slate-500 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
+                        <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
                           {cz(monthAmount(it, m, "budget"))}
                         </td>
-                        <td className={`px-3 py-1.5 text-right text-[13px] tabular-nums ${m.month >= cutoff ? "text-brand-600 dark:text-brand-300" : "text-slate-500"} ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
+                        <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
                           {cz(monthAmount(it, m, "realized"))}
                         </td>
                       </React.Fragment>
@@ -645,20 +645,20 @@ function LegCard({
               );
             })}
             {/* leg total row */}
-            <tr className="bg-slate-100 font-semibold dark:bg-slate-800">
-              <td className="sticky left-0 z-10 bg-slate-100 px-4 py-2 dark:bg-slate-800">TOTAL</td>
-              <td className={`px-3 py-2 text-right tabular-nums ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(legAgg.budget))}</td>
-              <td className={`px-3 py-2 text-right tabular-nums ${COL_W}`}>{fmt(conv(legAgg.actual))}</td>
-              <td className={`px-3 py-2 text-right tabular-nums ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(legAgg.forecast))}</td>
-              <td className={`border-r border-slate-200 px-3 py-2 text-right tabular-nums dark:border-slate-700 ${COL_W}`}>{fmt(conv(legAgg.total))}</td>
+            <tr className="bg-slate-100 dark:bg-slate-800">
+              <td className="sticky left-0 z-10 bg-slate-100 px-4 py-1.5 font-medium dark:bg-slate-800">TOTAL</td>
+              <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(legAgg.budget))}</td>
+              <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(legAgg.actual))}</td>
+              <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(legAgg.forecast))}</td>
+              <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${COL_W}`}>{fmt(conv(legAgg.total))}</td>
               {monthTotals.map((mt, idx) => {
                 const zebra = (idx + 1) % 2 === 0;
                 return (
                   <React.Fragment key={idx}>
-                    <td className={`px-3 py-2 text-right text-[13px] tabular-nums ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
+                    <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
                       {cz(mt.b)}
                     </td>
-                    <td className={`px-3 py-2 text-right text-[13px] tabular-nums ${idx + 1 >= cutoff ? "text-brand-600 dark:text-brand-300" : ""} ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
+                    <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
                       {cz(mt.r)}
                     </td>
                   </React.Fragment>
@@ -733,9 +733,7 @@ function MoneyInput({ value, onCommit, forecast, zebra }) {
   return (
     <td className={`px-2 py-1 ${COL_W} ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
       <input
-        className={`h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-[13px] tabular-nums outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 ${
-          forecast ? "text-brand-600 dark:text-brand-300" : ""
-        }`}
+        className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-[13px] font-light tabular-nums text-slate-400 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
         type="text"
         inputMode="decimal"
         value={display}
