@@ -590,7 +590,7 @@ function LegCard({
                 <th
                   key={mn}
                   colSpan={2}
-                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? AGG_ZEBRA + " " : ""}${idx + 1 >= cutoff ? "text-orange-500" : ""}`}
+                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? AGG_ZEBRA + " " : ""}${idx + 1 >= cutoff ? "text-orange-700" : ""}`}
                 >
                   {mn}
                 </th>
@@ -604,7 +604,7 @@ function LegCard({
                 return (
                   <React.Fragment key={mn}>
                     <th className={`${z}${COL_W} px-1 py-1 text-center font-medium`}>Budget</th>
-                    <th className={`${z}${COL_W} px-1 py-1 text-center font-medium ${fc ? "text-orange-500" : "text-emerald-600"}`}>
+                    <th className={`${z}${COL_W} px-1 py-1 text-center font-medium ${fc ? "text-orange-700" : "text-emerald-600"}`}>
                       {fc ? "Forecast" : "Actual"}
                     </th>
                   </React.Fragment>
