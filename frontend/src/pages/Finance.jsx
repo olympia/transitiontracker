@@ -426,13 +426,32 @@ function YearGrid({
   );
   const budgetWithCrs = yearAgg.budget + crTotal;
   const pctOfBudget = (v) => (budgetWithCrs ? (v / budgetWithCrs) * 100 : null);
+  // split the year forecast (regular items) into PO-committed (obligó) and not
+  let fcCommitted = 0;
+  let fcUncommitted = 0;
+  for (const leg of data.legs)
+    for (const it of leg.items)
+      if (!it.is_cr)
+        for (const m of it.months)
+          if (m.month >= cutoff) {
+            const amt = monthAmount(it, m, "realized");
+            if (m.po_committed) fcCommitted += amt;
+            else fcUncommitted += amt;
+          }
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <SummaryCard label="Budget" base={yearAgg.budget} conv={conv} cur={cur} />
         <SummaryCard label="Budget with CRs" base={budgetWithCrs} conv={conv} cur={cur} accent />
         <SummaryCard label="Actual" base={yearAgg.actual} conv={conv} cur={cur} pct={pctOfBudget(yearAgg.actual)} />
+        <ForecastCard
+          total={yearAgg.forecast}
+          committed={fcCommitted}
+          uncommitted={fcUncommitted}
+          conv={conv}
+          pctOf={pctOfBudget}
+        />
         <SummaryCard label="Total (Actual + FC)" base={yearAgg.total} conv={conv} cur={cur} pct={pctOfBudget(yearAgg.total)} />
       </div>
 
@@ -522,12 +541,46 @@ function SummaryCard({ label, base, conv, cur, accent, pct }) {
   );
 }
 
+// Forecast chip with an obligó / no-obligó breakdown
+function ForecastCard({ total, committed, uncommitted, conv, pctOf }) {
+  const line = (v) => `${fmt(conv(v))}${pctOf(v) != null ? ` · ${Math.round(pctOf(v))}%` : ""}`;
+  return (
+    <div className="card px-4 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        Forecast
+      </div>
+      <div className="mt-1 flex items-start justify-between gap-4">
+        <span className="text-2xl font-extrabold tabular-nums">{fmt(conv(total))}</span>
+        {pctOf(total) != null && (
+          <span className="text-sm font-semibold tabular-nums text-slate-400">
+            {Math.round(pctOf(total))}%
+          </span>
+        )}
+      </div>
+      <div className="mt-1.5 space-y-1 text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> obligó
+          </span>
+          <span>{line(committed)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-orange-500" /> no obligó
+          </span>
+          <span>{line(uncommitted)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // zebra background for an aggregate block (Budget/Actual/Forecast/Total) so the
 // four blocks read as separate columns, mirroring the Excel layout
 const AGG_ZEBRA = "bg-slate-50/70 dark:bg-slate-800/30";
 // uniform width for every numeric column (fits e.g. "9 999 999,99" + spare),
 // independent of content so all columns line up
-const COL_W = "w-[132px] min-w-[132px] whitespace-nowrap";
+const COL_W = "w-[172px] min-w-[172px] whitespace-nowrap";
 // vertical separator drawn before each month (except the first)
 const MONTH_SEP = "border-l border-slate-200 dark:border-slate-700";
 
@@ -842,6 +895,16 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
             className="h-3 w-3 shrink-0 accent-emerald-500"
           />
         )}
+        {hasPo && committed && (
+          <button
+            type="button"
+            onClick={onEditPo}
+            title={poNumber ? `PO: ${poNumber}` : "Set PO number"}
+            className="shrink-0 rounded bg-slate-100 px-1 text-[9px] font-bold leading-4 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          >
+            PO
+          </button>
+        )}
         <input
           className={`h-full w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-[13px] font-light tabular-nums outline-none ${
             disabled ? "cursor-not-allowed text-slate-300 dark:text-slate-600" : "text-slate-400"
@@ -861,16 +924,6 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
             onCommit(num(draft));
           }}
         />
-        {hasPo && committed && (
-          <button
-            type="button"
-            onClick={onEditPo}
-            title={poNumber ? `PO: ${poNumber}` : "Set PO number"}
-            className="shrink-0 rounded bg-slate-100 px-1 text-[9px] font-bold leading-4 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
-          >
-            PO
-          </button>
-        )}
       </div>
     </td>
   );
