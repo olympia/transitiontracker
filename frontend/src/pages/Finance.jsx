@@ -553,23 +553,23 @@ function LegCard({
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 border-b border-brand-200/60 bg-brand-50 px-4 py-3 dark:border-brand-500/20 dark:bg-brand-500/10">
+      <div className="flex flex-wrap items-center gap-3 bg-slate-800 px-4 py-3 dark:bg-slate-600">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[15px] font-extrabold text-brand-700 dark:text-brand-300">{leg.code || "—"}</span>
+            <span className="font-mono text-[15px] font-extrabold text-white">{leg.code || "—"}</span>
             {leg.category && (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-400/20 dark:bg-slate-800 dark:text-slate-300">
+              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-100 ring-1 ring-inset ring-white/15">
                 {leg.category}
               </span>
             )}
           </div>
-          {leg.name && <div className="truncate text-sm text-slate-500">{leg.name}</div>}
+          {leg.name && <div className="truncate text-sm text-slate-300">{leg.name}</div>}
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <button className="btn-ghost px-2 py-1" onClick={onEditLeg} title="Edit leg">
+          <button className="btn-ghost px-2 py-1 text-slate-200 hover:text-white" onClick={onEditLeg} title="Edit leg">
             <Pencil size={15} />
           </button>
-          <button className="btn-ghost px-2 py-1 text-rose-500" onClick={onDeleteLeg} title="Delete leg">
+          <button className="btn-ghost px-2 py-1 text-rose-400 hover:text-rose-300" onClick={onDeleteLeg} title="Delete leg">
             <Trash2 size={15} />
           </button>
         </div>
@@ -749,8 +749,8 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
 function TotalRow({ label, agg, monthTotals, conv }) {
   const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
   return (
-    <tr className="bg-slate-100 dark:bg-slate-800">
-      <td className="sticky left-0 z-10 bg-slate-100 px-4 py-1.5 font-medium dark:bg-slate-800">{label}</td>
+    <tr className="bg-slate-50 dark:bg-[#172132]">
+      <td className="sticky left-0 z-10 bg-slate-50 px-4 py-1.5 font-medium dark:bg-[#172132]">{label}</td>
       <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.budget))}</td>
       <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(agg.actual))}</td>
       <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
