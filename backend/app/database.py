@@ -93,6 +93,7 @@ def _run_migrations() -> None:
         "ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS daily_rate DOUBLE NOT NULL DEFAULT 0",
         "ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS is_cr TINYINT(1) NOT NULL DEFAULT 0",
         "ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS cr_kind VARCHAR(30) NOT NULL DEFAULT ''",
+        "ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS partner_item_id INT NULL",
         # drop the obsolete item-level amount/manday columns from the first
         # (scrapped) design; they were created NOT NULL and now block inserts
         "ALTER TABLE budget_items DROP COLUMN IF EXISTS responsible",

@@ -773,8 +773,25 @@ def update_month(
     obj = db.get(models.BudgetMonth, month_id)
     if not obj:
         raise HTTPException(404, "Budget month not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
         setattr(obj, k, v)
+    db.flush()
+    # Budget Reallocation: mirror the negated value into the partner item's
+    # matching month, so moving budget between legs stays balanced.
+    item = db.get(models.BudgetItem, obj.item_id)
+    if item and item.partner_item_id:
+        pm = (
+            db.query(models.BudgetMonth)
+            .filter(
+                models.BudgetMonth.item_id == item.partner_item_id,
+                models.BudgetMonth.month == obj.month,
+            )
+            .first()
+        )
+        if pm:
+            for k, v in data.items():
+                setattr(pm, k, -(v or 0))
     db.commit()
     db.refresh(obj)
     return obj

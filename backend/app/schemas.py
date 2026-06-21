@@ -238,6 +238,7 @@ class BudgetItemBase(BaseModel):
     daily_rate: float = 0.0
     is_cr: bool = False
     cr_kind: str = ""  # carry_over | reallocation | cancelation | cr
+    partner_item_id: int | None = None
     position: int = 0
 
 
@@ -251,6 +252,7 @@ class BudgetItemUpdate(BaseModel):
     daily_rate: float | None = None
     is_cr: bool | None = None
     cr_kind: str | None = None
+    partner_item_id: int | None = None
     position: int | None = None
 
 

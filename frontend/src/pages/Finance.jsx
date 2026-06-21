@@ -208,6 +208,25 @@ export default function Finance({ project, onProjectChange }) {
     api.updateMonth(monthId, { [`${field}_value`]: num(value) });
   }
 
+  // reflect a reallocation's negated value into its partner item's same month
+  // locally (the backend mirrors it on save); keeps the grid live
+  function mirrorPartner(partnerItemId, monthNumber, field, value) {
+    setData((d) => {
+      if (!d) return d;
+      const nd = structuredClone(d);
+      for (const leg of nd.legs)
+        for (const it of leg.items)
+          if (it.id === partnerItemId) {
+            const mm = it.months.find((m) => m.month === monthNumber);
+            if (mm) {
+              mm[`${field}_value`] = value;
+              return nd;
+            }
+          }
+      return nd;
+    });
+  }
+
   if (years === null) return <Spinner />;
 
   return (
@@ -299,6 +318,7 @@ export default function Finance({ project, onProjectChange }) {
               onEditCR={(legId, cr) => setItemEdit({ legId, item: cr })}
               patchMonth={patchMonth}
               saveMonth={saveMonth}
+              mirror={mirrorPartner}
               reload={loadView}
             />
           ) : null}
@@ -338,6 +358,7 @@ export default function Finance({ project, onProjectChange }) {
         <ItemModal
           ctx={itemEdit}
           codes={codes}
+          legs={data?.legs || []}
           onClose={() => setItemEdit(null)}
           onSaved={() => {
             setItemEdit(null);
@@ -367,6 +388,7 @@ function YearGrid({
   onEditCR,
   patchMonth,
   saveMonth,
+  mirror,
   reload,
 }) {
   // convert a base amount into the display currency (null if no rate)
@@ -382,14 +404,16 @@ function YearGrid({
       a + sumAgg(leg.items.filter((it) => it.is_cr).map((it) => aggItem(it, cutoff))).budget,
     0
   );
+  const budgetWithCrs = yearAgg.budget + crTotal;
+  const pctOfBudget = (v) => (budgetWithCrs ? (v / budgetWithCrs) * 100 : null);
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryCard label="Budget" base={yearAgg.budget} conv={conv} cur={cur} />
-        <SummaryCard label="Budget with CRs" base={yearAgg.budget + crTotal} conv={conv} cur={cur} accent />
-        <SummaryCard label="Actual" base={yearAgg.actual} conv={conv} cur={cur} />
-        <SummaryCard label="Total (Actual + FC)" base={yearAgg.total} conv={conv} cur={cur} />
+        <SummaryCard label="Budget with CRs" base={budgetWithCrs} conv={conv} cur={cur} accent />
+        <SummaryCard label="Actual" base={yearAgg.actual} conv={conv} cur={cur} pct={pctOfBudget(yearAgg.actual)} />
+        <SummaryCard label="Total (Actual + FC)" base={yearAgg.total} conv={conv} cur={cur} pct={pctOfBudget(yearAgg.total)} />
       </div>
 
       {data.legs.length === 0 ? (
@@ -430,10 +454,16 @@ function YearGrid({
               onEditCR={(cr) => onEditCR(leg.id, cr)}
               onDeleteCR={async (cr) => {
                 await api.deleteItem(cr.id);
+                if (cr.partner_item_id) {
+                  try {
+                    await api.deleteItem(cr.partner_item_id);
+                  } catch (e) {}
+                }
                 reload();
               }}
               patchMonth={patchMonth}
               saveMonth={saveMonth}
+              mirror={mirror}
             />
           ))}
           <button className="btn-subtle" onClick={onAddLeg}>
@@ -445,16 +475,26 @@ function YearGrid({
   );
 }
 
-function SummaryCard({ label, base, conv, cur, accent }) {
+function SummaryCard({ label, base, conv, cur, accent, pct }) {
   return (
     <div className="card px-4 py-3">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </div>
-      <div className={`mt-1 text-2xl font-extrabold tabular-nums ${accent ? "text-emerald-600" : ""}`}>
-        {fmt(conv(base))}
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className={`text-2xl font-extrabold tabular-nums ${accent ? "text-emerald-600" : ""}`}>
+          {fmt(conv(base))}
+        </span>
+        {pct != null && (
+          <span className="text-sm font-semibold tabular-nums text-slate-400">
+            {Math.round(pct)}%
+          </span>
+        )}
       </div>
-      <div className="text-xs font-medium text-slate-400">{cur}</div>
+      <div className="text-xs font-medium text-slate-400">
+        {cur}
+        {pct != null ? " · of Budget with CRs" : ""}
+      </div>
     </div>
   );
 }
@@ -482,6 +522,7 @@ function LegCard({
   onDeleteCR,
   patchMonth,
   saveMonth,
+  mirror,
 }) {
   // regular budget items and change-request rows live in the same list
   const regular = leg.items.filter((it) => !it.is_cr);
@@ -588,6 +629,7 @@ function LegCard({
                 onDelete={() => onDeleteItem(it)}
                 patchMonth={patchMonth}
                 saveMonth={saveMonth}
+                mirror={mirror}
               />
             ))}
             <TotalRow label="TOTAL" agg={budgetAgg} monthTotals={budgetMonths} conv={conv} />
@@ -603,6 +645,7 @@ function LegCard({
                 onDelete={() => onDeleteCR(it)}
                 patchMonth={patchMonth}
                 saveMonth={saveMonth}
+                mirror={mirror}
               />
             ))}
             {crs.length > 0 && (
@@ -625,18 +668,23 @@ function LegCard({
 }
 
 // one row in the grid — used for both regular budget items and CR rows
-function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, saveMonth }) {
+function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, saveMonth, mirror }) {
   const a = agg;
   const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
+  const commit = (m, field, v) => {
+    patchMonth(m.id, field, v);
+    saveMonth(m.id, field, v);
+    if (it.partner_item_id && mirror) mirror(it.partner_item_id, m.month, field, -num(v));
+  };
   return (
     <tr className="group hover:bg-slate-100 dark:hover:bg-slate-800">
-      <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-4 py-1.5 font-medium dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800">
+      <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-4 py-1.5 font-light text-slate-400 dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800">
         {it.is_cr && (
           <span className="mr-2 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             {CR_KINDS.find((k) => k.id === it.cr_kind)?.label || "CR"}
           </span>
         )}
-        {it.name || "—"}
+        {it.name || (it.is_cr ? "" : "—")}
         {it.item_type === "manday" && (
           <span className="ml-2 text-[11px] font-normal text-slate-400">
             {fmt(conv(it.daily_rate))} {cur}/d
@@ -655,18 +703,12 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
               <MoneyInput
                 value={m.budget_value}
                 zebra={zebra}
-                onCommit={(v) => {
-                  patchMonth(m.id, "budget", v);
-                  saveMonth(m.id, "budget", v);
-                }}
+                onCommit={(v) => commit(m, "budget", v)}
               />
               <MoneyInput
                 value={m.realized_value}
                 zebra={zebra}
-                onCommit={(v) => {
-                  patchMonth(m.id, "realized", v);
-                  saveMonth(m.id, "realized", v);
-                }}
+                onCommit={(v) => commit(m, "realized", v)}
               />
             </React.Fragment>
           );
@@ -825,7 +867,7 @@ function LegModal({ ctx, categories, onClose, onOpenSetup, onSaved }) {
 }
 
 // ----------------------------------------------------------------- item modal
-function ItemModal({ ctx, codes, onClose, onSaved }) {
+function ItemModal({ ctx, codes, legs = [], onClose, onSaved }) {
   const it = ctx.item;
   const editing = !!it;
   const isCr = ctx.isCr || it?.is_cr || false;
@@ -833,13 +875,22 @@ function ItemModal({ ctx, codes, onClose, onSaved }) {
   const [isManday, setIsManday] = useState(it?.item_type === "manday");
   const [rate, setRate] = useState(it?.daily_rate ?? 0);
   const [crKind, setCrKind] = useState(it?.cr_kind || "cr");
+  const otherLegs = legs.filter((l) => l.id !== ctx.legId);
+  const [partnerId, setPartnerId] = useState(() => otherLegs[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
 
-  // CRs are always fixed amounts; only the "CR" kind carries a free title
-  const showTitle = !isCr || crKind === "cr";
+  // CRs are always fixed amounts; every CR kind carries a title except Carry Over
+  const showTitle = !isCr || crKind !== "carry_over";
   const useManday = !isCr && isManday;
+  // a reallocation is created as a linked pair across two WBS legs
+  const isRealloc = isCr && crKind === "reallocation";
+  const pairing = isRealloc && !editing;
 
   async function save() {
+    if (pairing && !partnerId) {
+      window.alert("Choose the counterpart WBS leg for the reallocation.");
+      return;
+    }
     setBusy(true);
     try {
       const payload = {
@@ -849,8 +900,17 @@ function ItemModal({ ctx, codes, onClose, onSaved }) {
         is_cr: isCr,
         cr_kind: isCr ? crKind : "",
       };
-      if (editing) await api.updateItem(it.id, payload);
-      else await api.createItem(ctx.legId, payload);
+      if (editing) {
+        await api.updateItem(it.id, payload);
+      } else if (pairing) {
+        // create the reallocation on both legs and link them
+        const src = await api.createItem(ctx.legId, payload);
+        const partner = await api.createItem(Number(partnerId), payload);
+        await api.updateItem(src.id, { partner_item_id: partner.id });
+        await api.updateItem(partner.id, { partner_item_id: src.id });
+      } else {
+        await api.createItem(ctx.legId, payload);
+      }
       onSaved();
     } finally {
       setBusy(false);
@@ -879,6 +939,28 @@ function ItemModal({ ctx, codes, onClose, onSaved }) {
                 <option key={k.id} value={k.id}>{k.label}</option>
               ))}
             </select>
+          </Field>
+        )}
+        {pairing && (
+          <Field label="Counterpart WBS leg">
+            {otherLegs.length === 0 ? (
+              <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                Need at least one other WBS leg in this year to reallocate to.
+              </div>
+            ) : (
+              <>
+                <select className="input" value={partnerId} onChange={(e) => setPartnerId(Number(e.target.value))}>
+                  {otherLegs.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.code || l.name || `Leg ${l.id}`}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  A matching reallocation is created there; each month you enter is mirrored with the opposite sign.
+                </p>
+              </>
+            )}
           </Field>
         )}
         {showTitle && (
