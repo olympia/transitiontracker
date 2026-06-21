@@ -578,33 +578,28 @@ function LegCard({
       <div className="overflow-x-auto">
         <table className="text-sm">
           <thead>
-            <tr className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              <th rowSpan={2} className="sticky left-0 z-10 bg-white px-4 py-2 text-left dark:bg-slate-900">
+            <tr className="bg-slate-200 text-[11px] font-bold uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+              <th rowSpan={2} className="sticky left-0 z-10 bg-slate-200 px-4 py-2 text-left dark:bg-slate-700">
                 Item
               </th>
-              <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W} ${AGG_ZEBRA}`}>Budget</th>
+              <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W}`}>Budget</th>
               <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W}`}>Actual</th>
-              <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W} ${AGG_ZEBRA}`}>Forecast</th>
-              <th rowSpan={2} className={`border-r border-slate-200 px-3 py-2 text-right dark:border-slate-700 ${COL_W}`}>Total</th>
-              {MONTHS.map((mn, idx) => (
-                <th
-                  key={mn}
-                  colSpan={2}
-                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? AGG_ZEBRA : ""}`}
-                >
+              <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W}`}>Forecast</th>
+              <th rowSpan={2} className={`border-r border-slate-300 px-3 py-2 text-right dark:border-slate-600 ${COL_W}`}>Total</th>
+              {MONTHS.map((mn) => (
+                <th key={mn} colSpan={2} className="px-2 py-1 text-center">
                   {mn}
                 </th>
               ))}
               <th rowSpan={2}></th>
             </tr>
-            <tr className="text-[10px] font-semibold uppercase text-slate-400">
+            <tr className="bg-slate-200 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-200">
               {MONTHS.map((mn, idx) => {
-                const z = (idx + 1) % 2 === 0 ? AGG_ZEBRA + " " : "";
                 const fc = idx + 1 >= cutoff;
                 return (
                   <React.Fragment key={mn}>
-                    <th className={`${z}${COL_W} px-1 py-1 text-center font-medium`}>Budget</th>
-                    <th className={`${z}${COL_W} px-1 py-1 text-center font-medium ${fc ? "text-orange-700" : "text-emerald-600"}`}>
+                    <th className={`${COL_W} px-1 py-1 text-center font-medium`}>Budget</th>
+                    <th className={`${COL_W} px-1 py-1 text-center font-medium ${fc ? "text-orange-700" : "text-emerald-600"}`}>
                       {fc ? "Forecast" : "Actual"}
                     </th>
                   </React.Fragment>
