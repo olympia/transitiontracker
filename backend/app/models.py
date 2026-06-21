@@ -283,6 +283,9 @@ class BudgetMonth(Base):
     month: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..12
     budget_value: Mapped[float] = mapped_column(Float, default=0.0)
     realized_value: Mapped[float] = mapped_column(Float, default=0.0)
+    # for forecast months: whether the PO is out / committed (obligó) in SAP
+    po_committed: Mapped[bool] = mapped_column(Boolean, default=False)
+    po_number: Mapped[str] = mapped_column(String(60), default="")
 
     item: Mapped["BudgetItem"] = relationship(back_populates="months")
 

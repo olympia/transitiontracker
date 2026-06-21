@@ -791,7 +791,8 @@ def update_month(
         )
         if pm:
             for k, v in data.items():
-                setattr(pm, k, -(v or 0))
+                if k in ("budget_value", "realized_value"):
+                    setattr(pm, k, -(v or 0))
     db.commit()
     db.refresh(obj)
     return obj

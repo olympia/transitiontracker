@@ -208,6 +208,24 @@ export default function Finance({ project, onProjectChange }) {
     api.updateMonth(monthId, { [`${field}_value`]: num(value) });
   }
 
+  // set PO fields (committed flag / number) on a month: local + persist
+  function setPo(monthId, patch) {
+    setData((d) => {
+      if (!d) return d;
+      const nd = structuredClone(d);
+      for (const leg of nd.legs)
+        for (const it of leg.items) {
+          const mm = it.months.find((m) => m.id === monthId);
+          if (mm) {
+            Object.assign(mm, patch);
+            return nd;
+          }
+        }
+      return nd;
+    });
+    api.updateMonth(monthId, patch);
+  }
+
   // reflect a reallocation's negated value into its partner item's same month
   // locally (the backend mirrors it on save); keeps the grid live
   function mirrorPartner(partnerItemId, monthNumber, field, value) {
@@ -319,6 +337,7 @@ export default function Finance({ project, onProjectChange }) {
               patchMonth={patchMonth}
               saveMonth={saveMonth}
               mirror={mirrorPartner}
+              setPo={setPo}
               reload={loadView}
             />
           ) : null}
@@ -389,6 +408,7 @@ function YearGrid({
   patchMonth,
   saveMonth,
   mirror,
+  setPo,
   reload,
 }) {
   // convert a base amount into the display currency (null if no rate)
@@ -464,6 +484,7 @@ function YearGrid({
               patchMonth={patchMonth}
               saveMonth={saveMonth}
               mirror={mirror}
+              setPo={setPo}
             />
           ))}
           <button className="btn-subtle" onClick={onAddLeg}>
@@ -527,6 +548,7 @@ function LegCard({
   patchMonth,
   saveMonth,
   mirror,
+  setPo,
 }) {
   // regular budget items and change-request rows live in the same list
   const regular = leg.items.filter((it) => !it.is_cr);
@@ -634,6 +656,8 @@ function LegCard({
                 patchMonth={patchMonth}
                 saveMonth={saveMonth}
                 mirror={mirror}
+                setPo={setPo}
+                cutoff={cutoff}
               />
             ))}
             <TotalRow label="TOTAL" agg={budgetAgg} monthTotals={budgetMonths} conv={conv} />
@@ -650,6 +674,8 @@ function LegCard({
                 patchMonth={patchMonth}
                 saveMonth={saveMonth}
                 mirror={mirror}
+                setPo={setPo}
+                cutoff={cutoff}
               />
             ))}
             {crs.length > 0 && (
@@ -672,7 +698,7 @@ function LegCard({
 }
 
 // one row in the grid — used for both regular budget items and CR rows
-function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, saveMonth, mirror }) {
+function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, saveMonth, mirror, setPo, cutoff }) {
   const a = agg;
   const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
   // a reallocation only moves budget, so its actual/forecast cells are locked
@@ -722,6 +748,17 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
                 value={m.realized_value}
                 zebra={zebra}
                 disabled={lockRealized}
+                committed={m.month >= cutoff && m.po_committed}
+                poNumber={m.po_number}
+                onToggle={
+                  m.month >= cutoff && !lockRealized
+                    ? (c) => setPo(m.id, { po_committed: c })
+                    : undefined
+                }
+                onEditPo={() => {
+                  const n = window.prompt("PO number", m.po_number || "");
+                  if (n !== null) setPo(m.id, { po_number: n.trim() });
+                }}
                 onCommit={(v) => commit(m, "realized", v)}
               />
             </React.Fragment>
@@ -776,7 +813,7 @@ function TotalRow({ label, agg, monthTotals, conv }) {
   );
 }
 
-function MoneyInput({ value, onCommit, zebra, disabled, sep }) {
+function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber, onToggle, onEditPo }) {
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState("");
   const display = focused
@@ -784,29 +821,57 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep }) {
     : num(value) === 0
     ? ""
     : fmt(num(value));
+  const hasPo = !!onToggle; // forecast cell with PO controls
   return (
     <td className={`px-2 py-1 ${COL_W} ${sep ? MONTH_SEP : ""} ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
-      <input
-        className={`h-7 w-full rounded-md border px-2 text-right text-[13px] font-light tabular-nums text-slate-400 outline-none ${
+      <div
+        className={`flex h-7 items-center gap-1 rounded-md border px-1 ${
           disabled
-            ? "cursor-not-allowed border-transparent bg-transparent text-slate-300 dark:text-slate-600"
-            : "border-dashed border-slate-200/70 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700/60 dark:bg-slate-900"
-        }`}
-        type="text"
-        inputMode="decimal"
-        value={display}
-        placeholder={disabled ? "" : "0"}
-        disabled={disabled}
-        onFocus={() => {
-          setDraft(num(value) === 0 ? "" : fmtDraft(String(value)));
-          setFocused(true);
-        }}
-        onChange={(e) => setDraft(fmtDraft(e.target.value))}
-        onBlur={() => {
-          setFocused(false);
-          onCommit(num(draft));
-        }}
-      />
+            ? "border-transparent"
+            : committed
+            ? "border-solid border-emerald-500"
+            : "border-dashed border-slate-200/70 dark:border-slate-700/60"
+        } ${disabled ? "" : "bg-white focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 dark:bg-slate-900"}`}
+      >
+        {hasPo && (
+          <input
+            type="checkbox"
+            checked={!!committed}
+            onChange={(e) => onToggle(e.target.checked)}
+            title="PO committed (obligó)"
+            className="h-3 w-3 shrink-0 accent-emerald-500"
+          />
+        )}
+        <input
+          className={`h-full w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-[13px] font-light tabular-nums outline-none ${
+            disabled ? "cursor-not-allowed text-slate-300 dark:text-slate-600" : "text-slate-400"
+          }`}
+          type="text"
+          inputMode="decimal"
+          value={display}
+          placeholder={disabled ? "" : "0"}
+          disabled={disabled}
+          onFocus={() => {
+            setDraft(num(value) === 0 ? "" : fmtDraft(String(value)));
+            setFocused(true);
+          }}
+          onChange={(e) => setDraft(fmtDraft(e.target.value))}
+          onBlur={() => {
+            setFocused(false);
+            onCommit(num(draft));
+          }}
+        />
+        {hasPo && committed && (
+          <button
+            type="button"
+            onClick={onEditPo}
+            title={poNumber ? `PO: ${poNumber}` : "Set PO number"}
+            className="shrink-0 rounded bg-slate-100 px-1 text-[9px] font-bold leading-4 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          >
+            PO
+          </button>
+        )}
+      </div>
     </td>
   );
 }

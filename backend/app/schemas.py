@@ -224,11 +224,15 @@ class BudgetMonthOut(BaseModel):
     month: int
     budget_value: float
     realized_value: float
+    po_committed: bool = False
+    po_number: str = ""
 
 
 class BudgetMonthUpdate(BaseModel):
     budget_value: float | None = None
     realized_value: float | None = None
+    po_committed: bool | None = None
+    po_number: str | None = None
 
 
 # ---------- Budget item ----------
