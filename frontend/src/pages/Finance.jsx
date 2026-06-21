@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Wallet,
   Settings2,
@@ -8,6 +8,7 @@ import {
   Calendar,
   Layers,
   Coins,
+  Copy,
 } from "lucide-react";
 import { api } from "../api";
 import { Spinner, EmptyState, Modal, Field, Toggle } from "../components/ui.jsx";
@@ -866,6 +867,85 @@ function TotalRow({ label, agg, monthTotals, conv }) {
   );
 }
 
+function copyText(t) {
+  if (!t) return;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(t);
+    return;
+  }
+  // fallback for non-secure (http on LAN) contexts
+  const ta = document.createElement("textarea");
+  ta.value = t;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand("copy");
+  } catch (e) {}
+  document.body.removeChild(ta);
+}
+
+// the "PO" chip: click to edit; hover for a popover with the number + Copy.
+// Uses fixed positioning so it isn't clipped by the table's horizontal scroll.
+function PoTag({ poNumber, onEditPo }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [copied, setCopied] = useState(false);
+  const timer = useRef();
+
+  function show(e) {
+    clearTimeout(timer.current);
+    const r = e.currentTarget.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, left: r.left });
+    setCopied(false);
+    setOpen(true);
+  }
+  function scheduleClose() {
+    timer.current = setTimeout(() => setOpen(false), 120);
+  }
+
+  return (
+    <span className="shrink-0" onMouseEnter={show} onMouseLeave={scheduleClose}>
+      <button
+        type="button"
+        onClick={onEditPo}
+        className="rounded bg-slate-100 px-1 text-[9px] font-bold leading-4 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+      >
+        PO
+      </button>
+      {open && (
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 60 }}
+          onMouseEnter={() => clearTimeout(timer.current)}
+          onMouseLeave={scheduleClose}
+          className="rounded-lg border border-slate-200 bg-white p-2 shadow-soft dark:border-slate-700 dark:bg-slate-900"
+        >
+          <div className="mb-1.5 max-w-[220px] truncate font-mono text-xs text-slate-600 dark:text-slate-300">
+            {poNumber || "no PO number"}
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                copyText(poNumber);
+                setCopied(true);
+              }}
+              disabled={!poNumber}
+              className="btn-subtle h-7 px-2 text-xs disabled:opacity-40"
+            >
+              <Copy size={13} /> {copied ? "Copied" : "Copy"}
+            </button>
+            <button type="button" onClick={onEditPo} className="btn-subtle h-7 px-2 text-xs">
+              <Pencil size={13} /> Edit
+            </button>
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber, onToggle, onEditPo }) {
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState("");
@@ -895,16 +975,7 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
             className="h-3 w-3 shrink-0 accent-emerald-500"
           />
         )}
-        {hasPo && committed && (
-          <button
-            type="button"
-            onClick={onEditPo}
-            title={poNumber ? `PO: ${poNumber}` : "Set PO number"}
-            className="shrink-0 rounded bg-slate-100 px-1 text-[9px] font-bold leading-4 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
-          >
-            PO
-          </button>
-        )}
+        {hasPo && committed && <PoTag poNumber={poNumber} onEditPo={onEditPo} />}
         <input
           className={`h-full w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-[13px] font-light tabular-nums outline-none ${
             disabled ? "cursor-not-allowed text-slate-300 dark:text-slate-600" : "text-slate-400"
