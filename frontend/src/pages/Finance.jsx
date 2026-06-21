@@ -581,7 +581,7 @@ function ForecastCard({ total, committed, uncommitted, conv, pctOf }) {
 const AGG_ZEBRA = "bg-slate-50/70 dark:bg-slate-800/30";
 // uniform width for every numeric column (fits e.g. "9 999 999,99" + spare),
 // independent of content so all columns line up
-const COL_W = "w-[172px] min-w-[172px] whitespace-nowrap";
+const COL_W = "w-[164px] min-w-[164px] whitespace-nowrap";
 // vertical separator drawn before each month (except the first)
 const MONTH_SEP = "border-l border-slate-200 dark:border-slate-700";
 
@@ -954,19 +954,20 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
     : num(value) === 0
     ? ""
     : fmt(num(value));
-  const hasPo = !!onToggle; // forecast cell with PO controls
+  // PO controls only once the forecast cell actually has a value
+  const showPo = !!onToggle && num(value) !== 0;
   return (
     <td className={`px-2 py-1 ${COL_W} ${sep ? MONTH_SEP : ""} ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
       <div
         className={`flex h-7 items-center gap-1 rounded-md border px-1 ${
           disabled
             ? "border-transparent"
-            : committed
+            : showPo && committed
             ? "border-solid border-emerald-500"
             : "border-dashed border-slate-200/70 dark:border-slate-700/60"
         } ${disabled ? "" : "bg-white focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 dark:bg-slate-900"}`}
       >
-        {hasPo && (
+        {showPo && (
           <input
             type="checkbox"
             checked={!!committed}
@@ -975,7 +976,7 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
             className="h-3 w-3 shrink-0 accent-emerald-500"
           />
         )}
-        {hasPo && committed && <PoTag poNumber={poNumber} onEditPo={onEditPo} />}
+        {showPo && committed && <PoTag poNumber={poNumber} onEditPo={onEditPo} />}
         <input
           className={`h-full w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-[13px] font-light tabular-nums outline-none ${
             disabled ? "cursor-not-allowed text-slate-300 dark:text-slate-600" : "text-slate-400"
