@@ -553,10 +553,10 @@ function LegCard({
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+      <div className="flex flex-wrap items-center gap-3 border-b border-brand-200/60 bg-brand-50 px-4 py-3 dark:border-brand-500/20 dark:bg-brand-500/10">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-bold">{leg.code || "—"}</span>
+            <span className="font-mono text-[15px] font-extrabold text-brand-700 dark:text-brand-300">{leg.code || "—"}</span>
             {leg.category && (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-400/20 dark:bg-slate-800 dark:text-slate-300">
                 {leg.category}
@@ -590,7 +590,7 @@ function LegCard({
                 <th
                   key={mn}
                   colSpan={2}
-                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? AGG_ZEBRA + " " : ""}${idx + 1 >= cutoff ? "text-orange-700" : ""}`}
+                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? AGG_ZEBRA : ""}`}
                 >
                   {mn}
                 </th>
@@ -788,7 +788,7 @@ function MoneyInput({ value, onCommit, zebra, disabled }) {
         className={`h-7 w-full rounded-md border px-2 text-right text-[13px] font-light tabular-nums text-slate-400 outline-none ${
           disabled
             ? "cursor-not-allowed border-transparent bg-transparent text-slate-300 dark:text-slate-600"
-            : "border-slate-200 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
+            : "border-dashed border-slate-200/70 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700/60 dark:bg-slate-900"
         }`}
         type="text"
         inputMode="decimal"
