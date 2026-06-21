@@ -671,6 +671,8 @@ function LegCard({
 function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, saveMonth, mirror }) {
   const a = agg;
   const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
+  // a reallocation only moves budget, so its actual/forecast cells are locked
+  const lockRealized = it.is_cr && it.cr_kind === "reallocation";
   const commit = (m, field, v) => {
     patchMonth(m.id, field, v);
     saveMonth(m.id, field, v);
@@ -684,7 +686,13 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
             {CR_KINDS.find((k) => k.id === it.cr_kind)?.label || "CR"}
           </span>
         )}
-        {it.name || (it.is_cr ? "" : "—")}
+        {it.is_cr ? (
+          it.name && (
+            <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{it.name}</span>
+          )
+        ) : (
+          it.name || "—"
+        )}
         {it.item_type === "manday" && (
           <span className="ml-2 text-[11px] font-normal text-slate-400">
             {fmt(conv(it.daily_rate))} {cur}/d
@@ -708,6 +716,7 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
               <MoneyInput
                 value={m.realized_value}
                 zebra={zebra}
+                disabled={lockRealized}
                 onCommit={(v) => commit(m, "realized", v)}
               />
             </React.Fragment>
@@ -762,7 +771,7 @@ function TotalRow({ label, agg, monthTotals, conv }) {
   );
 }
 
-function MoneyInput({ value, onCommit, forecast, zebra }) {
+function MoneyInput({ value, onCommit, zebra, disabled }) {
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState("");
   const display = focused
@@ -773,11 +782,16 @@ function MoneyInput({ value, onCommit, forecast, zebra }) {
   return (
     <td className={`px-2 py-1 ${COL_W} ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
       <input
-        className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-[13px] font-light tabular-nums text-slate-400 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
+        className={`h-7 w-full rounded-md border px-2 text-right text-[13px] font-light tabular-nums text-slate-400 outline-none ${
+          disabled
+            ? "cursor-not-allowed border-transparent bg-transparent text-slate-300 dark:text-slate-600"
+            : "border-slate-200 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
+        }`}
         type="text"
         inputMode="decimal"
         value={display}
-        placeholder="0"
+        placeholder={disabled ? "" : "0"}
+        disabled={disabled}
         onFocus={() => {
           setDraft(num(value) === 0 ? "" : fmtDraft(String(value)));
           setFocused(true);
