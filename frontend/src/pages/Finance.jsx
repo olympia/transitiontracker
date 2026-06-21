@@ -507,6 +507,8 @@ const AGG_ZEBRA = "bg-slate-50/70 dark:bg-slate-800/30";
 // uniform width for every numeric column (fits e.g. "9 999 999,99" + spare),
 // independent of content so all columns line up
 const COL_W = "w-[132px] min-w-[132px] whitespace-nowrap";
+// vertical separator drawn before each month (except the first)
+const MONTH_SEP = "border-l border-slate-200 dark:border-slate-700";
 
 function LegCard({
   leg,
@@ -586,8 +588,12 @@ function LegCard({
               <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W}`}>Actual</th>
               <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W}`}>Forecast</th>
               <th rowSpan={2} className={`border-r border-slate-300 px-3 py-2 text-right dark:border-slate-600 ${COL_W}`}>Total</th>
-              {MONTHS.map((mn) => (
-                <th key={mn} colSpan={2} className="px-2 py-1 text-center">
+              {MONTHS.map((mn, idx) => (
+                <th
+                  key={mn}
+                  colSpan={2}
+                  className={`px-2 py-1 text-center ${idx > 0 ? MONTH_SEP : ""}`}
+                >
                   {mn}
                 </th>
               ))}
@@ -598,7 +604,7 @@ function LegCard({
                 const fc = idx + 1 >= cutoff;
                 return (
                   <React.Fragment key={mn}>
-                    <th className={`${COL_W} px-1 py-1 text-center font-medium`}>Budget</th>
+                    <th className={`${COL_W} px-1 py-1 text-center font-medium ${idx > 0 ? MONTH_SEP : ""}`}>Budget</th>
                     <th className={`${COL_W} px-1 py-1 text-center font-medium ${fc ? "text-orange-700" : "text-emerald-600"}`}>
                       {fc ? "Forecast" : "Actual"}
                     </th>
@@ -709,6 +715,7 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
               <MoneyInput
                 value={m.budget_value}
                 zebra={zebra}
+                sep={m.month > 1}
                 onCommit={(v) => commit(m, "budget", v)}
               />
               <MoneyInput
@@ -722,7 +729,7 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
         }
         return (
           <React.Fragment key={m.id}>
-            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
+            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${m.month > 1 ? MONTH_SEP : ""} ${zebra ? AGG_ZEBRA : ""}`}>
               {cz(monthAmount(it, m, "budget"))}
             </td>
             <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
@@ -759,7 +766,7 @@ function TotalRow({ label, agg, monthTotals, conv }) {
         const zebra = (idx + 1) % 2 === 0;
         return (
           <React.Fragment key={idx}>
-            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.b)}</td>
+            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${idx > 0 ? MONTH_SEP : ""} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.b)}</td>
             <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.r)}</td>
           </React.Fragment>
         );
@@ -769,7 +776,7 @@ function TotalRow({ label, agg, monthTotals, conv }) {
   );
 }
 
-function MoneyInput({ value, onCommit, zebra, disabled }) {
+function MoneyInput({ value, onCommit, zebra, disabled, sep }) {
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState("");
   const display = focused
@@ -778,7 +785,7 @@ function MoneyInput({ value, onCommit, zebra, disabled }) {
     ? ""
     : fmt(num(value));
   return (
-    <td className={`px-2 py-1 ${COL_W} ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
+    <td className={`px-2 py-1 ${COL_W} ${sep ? MONTH_SEP : ""} ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
       <input
         className={`h-7 w-full rounded-md border px-2 text-right text-[13px] font-light tabular-nums text-slate-400 outline-none ${
           disabled
