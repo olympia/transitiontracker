@@ -481,20 +481,22 @@ function SummaryCard({ label, base, conv, cur, accent, pct }) {
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </div>
-      <div className="mt-1 flex items-baseline gap-2">
+      <div className="mt-1 flex items-start justify-between gap-6">
         <span className={`text-2xl font-extrabold tabular-nums ${accent ? "text-emerald-600" : ""}`}>
           {fmt(conv(base))}
         </span>
         {pct != null && (
-          <span className="text-sm font-semibold tabular-nums text-slate-400">
-            {Math.round(pct)}%
-          </span>
+          <div className="text-right">
+            <div className="text-[10px] leading-tight text-slate-400">
+              budget utilization vs. budget with CRs
+            </div>
+            <div className="text-sm font-semibold tabular-nums text-slate-400">
+              {Math.round(pct)}%
+            </div>
+          </div>
         )}
       </div>
-      <div className="text-xs font-medium text-slate-400">
-        {cur}
-        {pct != null ? " · of Budget with CRs" : ""}
-      </div>
+      <div className="text-xs font-medium text-slate-400">{cur}</div>
     </div>
   );
 }
@@ -588,7 +590,7 @@ function LegCard({
                 <th
                   key={mn}
                   colSpan={2}
-                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? AGG_ZEBRA + " " : ""}${idx + 1 >= cutoff ? "text-brand-500" : ""}`}
+                  className={`px-2 py-1 text-center ${(idx + 1) % 2 === 0 ? AGG_ZEBRA + " " : ""}${idx + 1 >= cutoff ? "text-orange-500" : ""}`}
                 >
                   {mn}
                 </th>
@@ -598,11 +600,12 @@ function LegCard({
             <tr className="text-[10px] font-semibold uppercase text-slate-400">
               {MONTHS.map((mn, idx) => {
                 const z = (idx + 1) % 2 === 0 ? AGG_ZEBRA + " " : "";
+                const fc = idx + 1 >= cutoff;
                 return (
                   <React.Fragment key={mn}>
                     <th className={`${z}${COL_W} px-1 py-1 text-center font-medium`}>Budget</th>
-                    <th className={`${z}${COL_W} px-1 py-1 text-center font-medium text-brand-500`}>
-                      {idx + 1 < cutoff ? "Actual" : "Forecast"}
+                    <th className={`${z}${COL_W} px-1 py-1 text-center font-medium ${fc ? "text-orange-500" : "text-emerald-600"}`}>
+                      {fc ? "Forecast" : "Actual"}
                     </th>
                   </React.Fragment>
                 );
