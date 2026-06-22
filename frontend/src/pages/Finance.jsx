@@ -184,6 +184,35 @@ export default function Finance({ project, onProjectChange }) {
     cur === codes.base ? 1 : cur === codes.rep1 ? rates.r1 : cur === codes.rep2 ? rates.r2 : 1;
   const isBaseCur = cur === codes.base;
 
+  // one Item-column width for ALL legs (fits the longest item) so the aggregate
+  // and month columns line up across WBS leg cards
+  const itemColW = useMemo(() => {
+    if (!data) return 200;
+    const ctx = document.createElement("canvas").getContext("2d");
+    const FNAME = "Inter, ui-sans-serif, system-ui, sans-serif";
+    let max = 0;
+    for (const leg of data.legs)
+      for (const it of leg.items) {
+        let w;
+        if (it.is_cr) {
+          const label = CR_KINDS.find((k) => k.id === it.cr_kind)?.label || "CR";
+          ctx.font = `600 11px ${FNAME}`;
+          w = ctx.measureText(label).width + 18; // badge + padding
+          if (it.name) {
+            w += 8 + ctx.measureText(it.name).width;
+          }
+        } else {
+          ctx.font = `300 13px ${FNAME}`;
+          w = ctx.measureText(it.name || "—").width;
+          if (it.item_type === "manday") w += 78; // " X HUF/d" suffix
+        }
+        if (w > max) max = w;
+      }
+    ctx.font = `500 14px ${FNAME}`;
+    max = Math.max(max, ctx.measureText("TOTAL with CRs").width);
+    return Math.min(Math.max(Math.round(max) + 36, 168), 440); // + cell padding
+  }, [data]);
+
   useEffect(() => {
     if (cur) localStorage.setItem("tt-fin-cur", cur);
   }, [cur]);
@@ -329,6 +358,7 @@ export default function Finance({ project, onProjectChange }) {
               cur={cur}
               curFactor={curFactor}
               isBaseCur={isBaseCur}
+              itemColW={itemColW}
               onAddLeg={() => setLegEdit({ yearId: data.year.id, leg: null })}
               onEditLeg={(leg) => setLegEdit({ yearId: data.year.id, leg })}
               onAddItem={(legId) => setItemEdit({ legId, item: null })}
@@ -400,6 +430,7 @@ function YearGrid({
   cur,
   curFactor,
   isBaseCur,
+  itemColW,
   onAddLeg,
   onEditLeg,
   onAddItem,
@@ -477,6 +508,7 @@ function YearGrid({
               cur={cur}
               conv={conv}
               isBaseCur={isBaseCur}
+              itemColW={itemColW}
               onEditLeg={() => onEditLeg(leg)}
               onDeleteLeg={async () => {
                 if (window.confirm(`Delete WBS leg "${leg.code || leg.name}" and all its items?`)) {
@@ -591,6 +623,7 @@ function LegCard({
   cur,
   conv,
   isBaseCur,
+  itemColW,
   onEditLeg,
   onDeleteLeg,
   onAddItem,
@@ -644,6 +677,19 @@ function LegCard({
           {leg.name && <div className="truncate text-sm text-slate-300">{leg.name}</div>}
         </div>
         <div className="ml-auto flex items-center gap-1">
+          <button
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white"
+            onClick={onAddItem}
+          >
+            <Plus size={14} /> Item
+          </button>
+          <button
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white"
+            onClick={onAddCR}
+          >
+            <Plus size={14} /> CR
+          </button>
+          <span className="mx-1 h-5 w-px bg-white/15" />
           <button className="btn-ghost px-2 py-1 text-slate-200 hover:text-white" onClick={onEditLeg} title="Edit leg">
             <Pencil size={15} />
           </button>
@@ -654,10 +700,14 @@ function LegCard({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="text-sm">
+        <table className="text-sm" style={{ "--item-w": `${itemColW}px` }}>
           <thead>
             <tr className="bg-slate-200 text-[11px] font-bold uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-              <th rowSpan={2} className="sticky left-0 z-10 bg-slate-200 px-4 py-2 text-left dark:bg-slate-700">
+              <th
+                rowSpan={2}
+                style={{ width: "var(--item-w)", minWidth: "var(--item-w)", maxWidth: "var(--item-w)" }}
+                className="sticky left-0 z-10 bg-slate-200 px-4 py-2 text-left dark:bg-slate-700"
+              >
                 Item
               </th>
               <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W}`}>Budget</th>
@@ -738,15 +788,6 @@ function LegCard({
           </tbody>
         </table>
       </div>
-
-      <div className="flex flex-col items-start gap-0.5 border-t border-slate-100 px-4 py-2 dark:border-slate-800">
-        <button className="btn-ghost text-xs" onClick={onAddItem}>
-          <Plus size={14} /> Add budget item
-        </button>
-        <button className="btn-ghost text-xs" onClick={onAddCR}>
-          <Plus size={14} /> Add CR
-        </button>
-      </div>
     </div>
   );
 }
@@ -764,7 +805,10 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
   };
   return (
     <tr className="group hover:bg-slate-100 dark:hover:bg-slate-800">
-      <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-4 py-1.5 font-light text-slate-400 dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800">
+      <td
+        style={{ width: "var(--item-w)", minWidth: "var(--item-w)", maxWidth: "var(--item-w)" }}
+        className="sticky left-0 z-10 overflow-hidden text-ellipsis whitespace-nowrap bg-white px-4 py-1.5 text-[13px] font-light tracking-tight text-slate-400 dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800"
+      >
         {it.is_cr && (
           <span className="mr-2 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             {CR_KINDS.find((k) => k.id === it.cr_kind)?.label || "CR"}
@@ -848,7 +892,12 @@ function TotalRow({ label, agg, monthTotals, conv }) {
   const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
   return (
     <tr className="bg-slate-50 dark:bg-[#172132]">
-      <td className="sticky left-0 z-10 bg-slate-50 px-4 py-1.5 font-medium dark:bg-[#172132]">{label}</td>
+      <td
+        style={{ width: "var(--item-w)", minWidth: "var(--item-w)", maxWidth: "var(--item-w)" }}
+        className="sticky left-0 z-10 bg-slate-50 px-4 py-1.5 font-medium dark:bg-[#172132]"
+      >
+        {label}
+      </td>
       <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.budget))}</td>
       <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(agg.actual))}</td>
       <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
