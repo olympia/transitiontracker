@@ -663,8 +663,8 @@ const COL_W = "w-[128px] min-w-[128px] whitespace-nowrap";
 // the yearly aggregate columns (Budget/Actual/Forecast/Total) are narrower —
 // they have no checkbox/PO controls
 const AGG_W = "w-[124px] min-w-[124px] whitespace-nowrap";
-// vertical separator drawn before each month (except the first)
-const MONTH_SEP = "border-l border-slate-200 dark:border-slate-700";
+// vertical separator drawn before each month (except the first) — leads the eye
+const MONTH_SEP = "border-l-2 border-slate-300 dark:border-slate-600";
 
 function LegCard({
   leg,
@@ -765,15 +765,22 @@ function LegCard({
               <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Actual</th>
               <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Forecast</th>
               <th rowSpan={2} className={`border-r border-slate-300 px-3 py-2 text-right dark:border-slate-600 ${AGG_W}`}>Total</th>
-              {MONTHS.map((mn, idx) => (
-                <th
-                  key={mn}
-                  colSpan={2}
-                  className={`px-2 py-1 text-center ${idx > 0 ? MONTH_SEP : ""}`}
-                >
-                  {mn}
-                </th>
-              ))}
+              {MONTHS.map((mn, idx) => {
+                const fc = idx + 1 >= cutoff;
+                return (
+                  <th key={mn} colSpan={2} className={`px-2 py-1 text-center ${idx > 0 ? MONTH_SEP : ""}`}>
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold normal-case ${
+                        fc
+                          ? "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
+                          : "bg-white text-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                      }`}
+                    >
+                      {mn}
+                    </span>
+                  </th>
+                );
+              })}
               <th rowSpan={2}></th>
             </tr>
             <tr className="bg-slate-200 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-200">
@@ -883,19 +890,16 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
       <td className={`px-3 py-1 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
       <td className={`border-r border-slate-200 px-3 py-1 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(a.total))}</td>
       {it.months.map((m) => {
-        const zebra = m.month % 2 === 0;
         if (isBaseCur) {
           return (
             <React.Fragment key={m.id}>
               <MoneyInput
                 value={m.budget_value}
-                zebra={zebra}
                 sep={m.month > 1}
                 onCommit={(v) => commit(m, "budget", v)}
               />
               <MoneyInput
                 value={m.realized_value}
-                zebra={zebra}
                 disabled={lockRealized}
                 committed={m.month >= cutoff && m.po_committed}
                 poNumber={m.po_number}
@@ -915,10 +919,10 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
         }
         return (
           <React.Fragment key={m.id}>
-            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${m.month > 1 ? MONTH_SEP : ""} ${zebra ? AGG_ZEBRA : ""}`}>
+            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${m.month > 1 ? MONTH_SEP : ""}`}>
               {cz(monthAmount(it, m, "budget"))}
             </td>
-            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
+            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W}`}>
               {cz(monthAmount(it, m, "realized"))}
             </td>
           </React.Fragment>
@@ -953,15 +957,12 @@ function TotalRow({ label, agg, monthTotals, conv }) {
       <td className={`px-3 py-1 text-right font-light tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(agg.actual))}</td>
       <td className={`px-3 py-1 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
       <td className={`border-r border-slate-200 px-3 py-1 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(agg.total))}</td>
-      {monthTotals.map((mt, idx) => {
-        const zebra = (idx + 1) % 2 === 0;
-        return (
-          <React.Fragment key={idx}>
-            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${idx > 0 ? MONTH_SEP : ""} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.b)}</td>
-            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.r)}</td>
-          </React.Fragment>
-        );
-      })}
+      {monthTotals.map((mt, idx) => (
+        <React.Fragment key={idx}>
+          <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${idx > 0 ? MONTH_SEP : ""}`}>{cz(mt.b)}</td>
+          <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W}`}>{cz(mt.r)}</td>
+        </React.Fragment>
+      ))}
       <td></td>
     </tr>
   );
