@@ -197,6 +197,11 @@ export default function Finance({ project, onProjectChange }) {
     if (!data) return 200;
     const ctx = document.createElement("canvas").getContext("2d");
     const FNAME = "Inter, ui-sans-serif, system-ui, sans-serif";
+    const setLS = (v) => {
+      try {
+        ctx.letterSpacing = v;
+      } catch (e) {}
+    };
     let max = 0;
     for (const leg of data.legs)
       for (const it of leg.items) {
@@ -204,22 +209,30 @@ export default function Finance({ project, onProjectChange }) {
         if (it.is_cr) {
           const label = CR_KINDS.find((k) => k.id === it.cr_kind)?.label || "CR";
           ctx.font = `600 11px ${FNAME}`;
+          setLS("0");
           w = ctx.measureText(label).width + 18; // badge + padding
           if (it.name) {
+            ctx.font = `400 11px ${FNAME}`;
             w += 8 + ctx.measureText(it.name).width;
           }
         } else {
           ctx.font = `300 13px ${FNAME}`;
+          setLS("-0.025em"); // matches tracking-tight on the item name
           w = ctx.measureText(it.name || "—").width;
-          if (it.item_type === "manday") w += 78; // " X HUF/d" suffix
+          if (it.item_type === "manday") {
+            ctx.font = `400 11px ${FNAME}`;
+            setLS("0");
+            w += 6 + ctx.measureText(` 000 000 ${cur}/d`).width;
+          }
         }
         if (w > max) max = w;
       }
     ctx.font = `500 14px ${FNAME}`;
+    setLS("0");
     max = Math.max(max, ctx.measureText("TOTAL with CRs").width);
-    // slack covers font-load timing + tracking; + cell padding (px-4 = 32)
-    return Math.min(Math.max(Math.round(max * 1.06) + 40, 168), 620);
-  }, [data, fontReady]);
+    // + cell padding (px-4 = 32) and a small buffer
+    return Math.min(Math.max(Math.round(max) + 36, 168), 560);
+  }, [data, fontReady, cur]);
 
   useEffect(() => {
     if (cur) localStorage.setItem("tt-fin-cur", cur);
