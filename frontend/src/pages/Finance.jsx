@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Wallet,
   Settings2,
@@ -357,7 +357,7 @@ export default function Finance({ project, onProjectChange }) {
               <button
                 key={y.id}
                 onClick={() => setYearId(y.id)}
-                className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                className={`rounded-lg px-4 py-1 text-sm font-semibold transition ${
                   y.id === yearId
                     ? "bg-white text-brand-600 shadow-soft dark:bg-slate-900"
                     : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
@@ -467,6 +467,29 @@ function YearGrid({
   // convert a base amount into the display currency (null if no rate)
   const conv = (b) => (curFactor ? b / curFactor : null);
 
+  // keep all WBS blocks horizontally scrolled in sync
+  const scrollers = useRef([]);
+  const sharedX = useRef(0);
+  const syncing = useRef(false);
+  const registerScroller = useCallback((el) => {
+    if (!el) return;
+    if (!scrollers.current.includes(el)) scrollers.current.push(el);
+    if (el.scrollLeft !== sharedX.current) el.scrollLeft = sharedX.current;
+  }, []);
+  const onBlockScroll = useCallback((e) => {
+    if (syncing.current) return;
+    syncing.current = true;
+    const x = e.currentTarget.scrollLeft;
+    sharedX.current = x;
+    scrollers.current = scrollers.current.filter((el) => el.isConnected);
+    for (const el of scrollers.current) {
+      if (el !== e.currentTarget && el.scrollLeft !== x) el.scrollLeft = x;
+    }
+    requestAnimationFrame(() => {
+      syncing.current = false;
+    });
+  }, []);
+
   // regular budget items drive the headline totals; CR rows are summed separately
   const legAggs = data.legs.map((leg) =>
     sumAgg(leg.items.filter((it) => !it.is_cr).map((it) => aggItem(it, cutoff)))
@@ -558,6 +581,8 @@ function YearGrid({
               saveMonth={saveMonth}
               mirror={mirror}
               setPo={setPo}
+              scrollRef={registerScroller}
+              onScroll={onBlockScroll}
             />
           ))}
           <button className="btn-subtle" onClick={onAddLeg}>
@@ -634,7 +659,7 @@ function ForecastCard({ total, committed, uncommitted, conv, pctOf }) {
 const AGG_ZEBRA = "bg-slate-50/70 dark:bg-slate-800/30";
 // uniform width for every numeric column (fits e.g. "9 999 999,99" + spare),
 // independent of content so all columns line up
-const COL_W = "w-[164px] min-w-[164px] whitespace-nowrap";
+const COL_W = "w-[128px] min-w-[128px] whitespace-nowrap";
 // the yearly aggregate columns (Budget/Actual/Forecast/Total) are narrower —
 // they have no checkbox/PO controls
 const AGG_W = "w-[124px] min-w-[124px] whitespace-nowrap";
@@ -660,6 +685,8 @@ function LegCard({
   saveMonth,
   mirror,
   setPo,
+  scrollRef,
+  onScroll,
 }) {
   // regular budget items and change-request rows live in the same list
   const regular = leg.items.filter((it) => !it.is_cr);
@@ -723,7 +750,7 @@ function LegCard({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" ref={scrollRef} onScroll={onScroll}>
         <table className="text-sm" style={{ "--item-w": `${itemColW}px` }}>
           <thead>
             <tr className="bg-slate-200 text-[11px] font-bold uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-200">
@@ -831,7 +858,7 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
     <tr className="group hover:bg-slate-100 dark:hover:bg-slate-800">
       <td
         style={{ width: "var(--item-w)", minWidth: "var(--item-w)", maxWidth: "var(--item-w)" }}
-        className="sticky left-0 z-10 overflow-hidden text-ellipsis whitespace-nowrap bg-white px-4 py-1.5 text-[13px] font-light tracking-tight text-slate-400 dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800"
+        className="sticky left-0 z-10 overflow-hidden text-ellipsis whitespace-nowrap bg-white px-4 py-1 text-[13px] font-light tracking-tight text-slate-400 dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800"
       >
         {it.is_cr && (
           <span className="mr-2 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
@@ -851,10 +878,10 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
           </span>
         )}
       </td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(a.actual))}</td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
-      <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(a.total))}</td>
+      <td className={`px-3 py-1 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
+      <td className={`px-3 py-1 text-right font-light tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(a.actual))}</td>
+      <td className={`px-3 py-1 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
+      <td className={`border-r border-slate-200 px-3 py-1 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(a.total))}</td>
       {it.months.map((m) => {
         const zebra = m.month % 2 === 0;
         if (isBaseCur) {
@@ -888,16 +915,16 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
         }
         return (
           <React.Fragment key={m.id}>
-            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${m.month > 1 ? MONTH_SEP : ""} ${zebra ? AGG_ZEBRA : ""}`}>
+            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${m.month > 1 ? MONTH_SEP : ""} ${zebra ? AGG_ZEBRA : ""}`}>
               {cz(monthAmount(it, m, "budget"))}
             </td>
-            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
+            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>
               {cz(monthAmount(it, m, "realized"))}
             </td>
           </React.Fragment>
         );
       })}
-      <td className="px-2 py-1.5">
+      <td className="px-2 py-1">
         <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
           <button className="btn-ghost px-1.5 py-1" onClick={onEdit} title="Edit">
             <Pencil size={14} />
@@ -918,20 +945,20 @@ function TotalRow({ label, agg, monthTotals, conv }) {
     <tr className="bg-slate-50 dark:bg-[#172132]">
       <td
         style={{ width: "var(--item-w)", minWidth: "var(--item-w)", maxWidth: "var(--item-w)" }}
-        className="sticky left-0 z-10 bg-slate-50 px-4 py-1.5 font-medium dark:bg-[#172132]"
+        className="sticky left-0 z-10 bg-slate-50 px-4 py-1 font-medium dark:bg-[#172132]"
       >
         {label}
       </td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.budget))}</td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(agg.actual))}</td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
-      <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(agg.total))}</td>
+      <td className={`px-3 py-1 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.budget))}</td>
+      <td className={`px-3 py-1 text-right font-light tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(agg.actual))}</td>
+      <td className={`px-3 py-1 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
+      <td className={`border-r border-slate-200 px-3 py-1 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(agg.total))}</td>
       {monthTotals.map((mt, idx) => {
         const zebra = (idx + 1) % 2 === 0;
         return (
           <React.Fragment key={idx}>
-            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${idx > 0 ? MONTH_SEP : ""} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.b)}</td>
-            <td className={`px-3 py-1.5 text-right text-[13px] font-light tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.r)}</td>
+            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${idx > 0 ? MONTH_SEP : ""} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.b)}</td>
+            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${zebra ? AGG_ZEBRA : ""}`}>{cz(mt.r)}</td>
           </React.Fragment>
         );
       })}
@@ -1030,9 +1057,9 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
   // PO controls only once the forecast cell actually has a value
   const showPo = !!onToggle && num(value) !== 0;
   return (
-    <td className={`px-2 py-1 ${COL_W} ${sep ? MONTH_SEP : ""} ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
+    <td className={`px-2 py-0.5 ${COL_W} ${sep ? MONTH_SEP : ""} ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
       <div
-        className={`flex h-7 items-center gap-1 rounded-md border px-1 ${
+        className={`flex h-6 items-center gap-1 rounded-md border px-1 ${
           disabled
             ? "border-transparent"
             : showPo && committed
@@ -1051,7 +1078,7 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
         )}
         {showPo && committed && <PoTag poNumber={poNumber} onEditPo={onEditPo} />}
         <input
-          className={`h-full w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-[13px] font-light tabular-nums outline-none ${
+          className={`h-full w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-[13px] font-light tracking-tight tabular-nums outline-none ${
             disabled ? "cursor-not-allowed text-slate-300 dark:text-slate-600" : "text-slate-400"
           }`}
           type="text"
@@ -1453,7 +1480,7 @@ function CategoryRow({ cat, onChanged }) {
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5 dark:bg-slate-800/50">
+    <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-1 dark:bg-slate-800/50">
       <input
         className="input h-8 flex-1"
         value={name}
