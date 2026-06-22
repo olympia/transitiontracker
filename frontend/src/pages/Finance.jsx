@@ -115,6 +115,13 @@ export default function Finance({ project, onProjectChange }) {
   const [displayCur, setDisplayCur] = useState(
     () => localStorage.getItem("tt-fin-cur") || ""
   );
+  const [fontReady, setFontReady] = useState(false);
+
+  useEffect(() => {
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => setFontReady(true));
+    }
+  }, []);
 
   async function loadYears(selectId) {
     const list = await api.listYears(project.id);
@@ -210,8 +217,9 @@ export default function Finance({ project, onProjectChange }) {
       }
     ctx.font = `500 14px ${FNAME}`;
     max = Math.max(max, ctx.measureText("TOTAL with CRs").width);
-    return Math.min(Math.max(Math.round(max) + 36, 168), 440); // + cell padding
-  }, [data]);
+    // slack covers font-load timing + tracking; + cell padding (px-4 = 32)
+    return Math.min(Math.max(Math.round(max * 1.06) + 40, 168), 620);
+  }, [data, fontReady]);
 
   useEffect(() => {
     if (cur) localStorage.setItem("tt-fin-cur", cur);
@@ -614,6 +622,9 @@ const AGG_ZEBRA = "bg-slate-50/70 dark:bg-slate-800/30";
 // uniform width for every numeric column (fits e.g. "9 999 999,99" + spare),
 // independent of content so all columns line up
 const COL_W = "w-[164px] min-w-[164px] whitespace-nowrap";
+// the yearly aggregate columns (Budget/Actual/Forecast/Total) are narrower —
+// they have no checkbox/PO controls
+const AGG_W = "w-[124px] min-w-[124px] whitespace-nowrap";
 // vertical separator drawn before each month (except the first)
 const MONTH_SEP = "border-l border-slate-200 dark:border-slate-700";
 
@@ -710,10 +721,10 @@ function LegCard({
               >
                 Item
               </th>
-              <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W}`}>Budget</th>
-              <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W}`}>Actual</th>
-              <th rowSpan={2} className={`px-3 py-2 text-right ${COL_W}`}>Forecast</th>
-              <th rowSpan={2} className={`border-r border-slate-300 px-3 py-2 text-right dark:border-slate-600 ${COL_W}`}>Total</th>
+              <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Budget</th>
+              <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Actual</th>
+              <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Forecast</th>
+              <th rowSpan={2} className={`border-r border-slate-300 px-3 py-2 text-right dark:border-slate-600 ${AGG_W}`}>Total</th>
               {MONTHS.map((mn, idx) => (
                 <th
                   key={mn}
@@ -827,10 +838,10 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
           </span>
         )}
       </td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(a.actual))}</td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
-      <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${COL_W}`}>{fmt(conv(a.total))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(a.actual))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
+      <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(a.total))}</td>
       {it.months.map((m) => {
         const zebra = m.month % 2 === 0;
         if (isBaseCur) {
@@ -898,10 +909,10 @@ function TotalRow({ label, agg, monthTotals, conv }) {
       >
         {label}
       </td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.budget))}</td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W}`}>{fmt(conv(agg.actual))}</td>
-      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${COL_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
-      <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${COL_W}`}>{fmt(conv(agg.total))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.budget))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(agg.actual))}</td>
+      <td className={`px-3 py-1.5 text-right font-light tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
+      <td className={`border-r border-slate-200 px-3 py-1.5 text-right font-light tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(agg.total))}</td>
       {monthTotals.map((mt, idx) => {
         const zebra = (idx + 1) % 2 === 0;
         return (
