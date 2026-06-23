@@ -32,13 +32,21 @@ function useTheme() {
   return [dark, setDark];
 }
 
-const TABS = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
-  { id: "report", label: "Report", icon: BarChart3 },
-  { id: "finance", label: "Finance", icon: Wallet },
-  { id: "template", label: "Task template", icon: ListChecks },
+const MAIN_TABS = [
+  { id: "activation", label: "Activation Tracker", icon: LayoutGrid },
+  { id: "financial", label: "Financial Tracker", icon: Wallet },
   { id: "projects", label: "Projects", icon: FolderKanban },
 ];
+
+const SUB_TABS = {
+  activation: [
+    { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
+    { id: "report", label: "Status Report", icon: BarChart3 },
+    { id: "template", label: "Task template", icon: ListChecks },
+  ],
+  financial: [{ id: "budget", label: "Budget Details", icon: Wallet }],
+  projects: [],
+};
 
 export default function App() {
   const [dark, setDark] = useTheme();
@@ -46,10 +54,21 @@ export default function App() {
   const [projectId, setProjectId] = useState(
     () => Number(localStorage.getItem("tt-project")) || null
   );
-  const [tab, setTab] = useState("dashboard");
+  const [mainTab, setMainTab] = useState("activation");
+  const [subTab, setSubTab] = useState("dashboard");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [drill, setDrill] = useState(null);
+
+  function selectMain(id) {
+    setMainTab(id);
+    setSubTab(SUB_TABS[id]?.[0]?.id ?? null);
+    setDrill(null);
+  }
+  function selectSub(id) {
+    setSubTab(id);
+    setDrill(null);
+  }
 
   async function loadProjects(selectId) {
     const list = await api.listProjects();
@@ -162,16 +181,16 @@ export default function App() {
           </div>
         </div>
 
-        {/* tabs */}
+        {/* main tabs */}
         <div className="mx-auto max-w-[2400px] px-4 sm:px-6">
           <nav className="flex gap-1">
-            {TABS.map((t) => {
+            {MAIN_TABS.map((t) => {
               const Icon = t.icon;
-              const active = tab === t.id;
+              const active = mainTab === t.id;
               return (
                 <button
                   key={t.id}
-                  onClick={() => { setTab(t.id); setDrill(null); }}
+                  onClick={() => selectMain(t.id)}
                   className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold transition ${
                     active
                       ? "border-brand-600 text-brand-600"
@@ -186,25 +205,60 @@ export default function App() {
         </div>
       </header>
 
+      {/* sub tabs */}
+      {SUB_TABS[mainTab]?.length > 0 && (
+        <div className="border-b border-slate-200/70 bg-slate-50/60 dark:border-slate-800/70 dark:bg-slate-900/40">
+          <div className="mx-auto max-w-[2400px] px-4 py-2 sm:px-6">
+            <div className="flex flex-wrap gap-1">
+              {SUB_TABS[mainTab].map((s) => {
+                const Icon = s.icon;
+                const active = subTab === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => selectSub(s.id)}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      active
+                        ? "bg-brand-600 text-white shadow-soft"
+                        : "text-slate-500 hover:bg-slate-200/60 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <Icon size={14} /> {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="mx-auto max-w-[2400px] px-4 py-6 sm:px-6">
-        {!project ? (
-          <Projects projects={projects} onChange={loadProjects} />
-        ) : tab === "dashboard" ? (
-          <Dashboard project={project} drill={drill} onClearDrill={() => setDrill(null)} />
-        ) : tab === "report" ? (
-          <Report project={project} onDrill={(ids, label) => { setDrill({ ids, label }); setTab("dashboard"); }} />
-        ) : tab === "finance" ? (
-          <Finance project={project} onProjectChange={loadProjects} />
-        ) : tab === "template" ? (
-          <TemplateEditor project={project} />
-        ) : (
+        {mainTab === "projects" ? (
           <Projects
             projects={projects}
             onChange={loadProjects}
             activeId={projectId}
             onSelect={setProjectId}
           />
-        )}
+        ) : !project ? (
+          <Projects projects={projects} onChange={loadProjects} />
+        ) : mainTab === "activation" ? (
+          subTab === "dashboard" ? (
+            <Dashboard project={project} drill={drill} onClearDrill={() => setDrill(null)} />
+          ) : subTab === "report" ? (
+            <Report
+              project={project}
+              onDrill={(ids, label) => {
+                setDrill({ ids, label });
+                setSubTab("dashboard");
+              }}
+            />
+          ) : (
+            <TemplateEditor project={project} />
+          )
+        ) : mainTab === "financial" ? (
+          <Finance project={project} onProjectChange={loadProjects} />
+        ) : null}
       </main>
 
       <NewProjectModal
@@ -213,7 +267,8 @@ export default function App() {
         onCreated={(p) => {
           setNewOpen(false);
           loadProjects(p.id);
-          setTab("template");
+          setMainTab("activation");
+          setSubTab("template");
         }}
       />
     </div>

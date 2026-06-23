@@ -765,22 +765,13 @@ function LegCard({
               <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Actual</th>
               <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Forecast</th>
               <th rowSpan={2} className={`border-r border-slate-300 px-3 py-2 text-right dark:border-slate-600 ${AGG_W}`}>Total</th>
-              {MONTHS.map((mn, idx) => {
-                const fc = idx + 1 >= cutoff;
-                return (
-                  <th key={mn} colSpan={2} className={`px-2 py-1 text-center ${idx > 0 ? MONTH_SEP : ""}`}>
-                    <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold normal-case ${
-                        fc
-                          ? "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
-                          : "bg-white text-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                      }`}
-                    >
-                      {mn}
-                    </span>
-                  </th>
-                );
-              })}
+              {MONTHS.map((mn, idx) => (
+                <th key={mn} colSpan={2} className={`px-2 py-1 text-center ${idx > 0 ? MONTH_SEP : ""}`}>
+                  <span className="inline-block rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                    {mn}
+                  </span>
+                </th>
+              ))}
               <th rowSpan={2}></th>
             </tr>
             <tr className="bg-slate-200 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-200">
