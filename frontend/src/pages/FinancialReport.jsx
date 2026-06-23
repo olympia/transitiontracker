@@ -172,24 +172,28 @@ function niceMax(v) {
 function ComboChart({ months }) {
   const H = 340;
   const padL = 56;
-  const padR = 56;
+  const padR = 20;
   const padT = 16;
   const padB = 64;
   const colW = Math.max(42, Math.min(72, 720 / Math.max(months.length, 1)));
   const W = padL + padR + months.length * colW;
   const innerH = H - padT - padB;
 
-  const maxBar = niceMax(Math.max(1, ...months.flatMap((m) => [m.budget, m.actual, m.forecast])));
-  const maxLine = niceMax(Math.max(1, ...months.map((m) => Math.max(m.cumBudget, m.cumForecast))));
-  const yb = (v) => padT + innerH - (v / maxBar) * innerH;
-  const yl = (v) => padT + innerH - (v / maxLine) * innerH;
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxBar);
+  // single shared scale so the cumulative curves read correctly against the bars
+  const maxVal = niceMax(
+    Math.max(
+      1,
+      ...months.flatMap((m) => [m.budget, m.actual, m.forecast, m.cumBudget, m.cumActual, m.cumForecast])
+    )
+  );
+  const y = (v) => padT + innerH - (v / maxVal) * innerH;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxVal);
 
-  const linePath = (key, scale) =>
+  const linePath = (key) =>
     months
       .map((m, i) => {
         const cx = padL + i * colW + colW / 2;
-        return `${i ? "L" : "M"}${cx.toFixed(1)},${scale(m[key]).toFixed(1)}`;
+        return `${i ? "L" : "M"}${cx.toFixed(1)},${y(m[key]).toFixed(1)}`;
       })
       .join(" ");
 
@@ -199,30 +203,24 @@ function ComboChart({ months }) {
       <svg width={W} height={H} className="block">
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={padL} x2={W - padR} y1={yb(t)} y2={yb(t)} className="stroke-slate-200 dark:stroke-slate-800" strokeWidth="1" />
-            <text x={padL - 8} y={yb(t) + 4} textAnchor="end" className="fill-slate-400" fontSize="10">
+            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} className="stroke-slate-200 dark:stroke-slate-800" strokeWidth="1" />
+            <text x={padL - 8} y={y(t) + 4} textAnchor="end" className="fill-slate-400" fontSize="10">
               {fmtShort(t)}
             </text>
           </g>
-        ))}
-        {/* right axis labels (cumulative) */}
-        {ticks.map((t, i) => (
-          <text key={i} x={W - padR + 8} y={yl((i / 4) * maxLine) + 4} textAnchor="start" className="fill-slate-400" fontSize="10">
-            {fmtShort((i / 4) * maxLine)}
-          </text>
         ))}
 
         {months.map((m, i) => {
           const x0 = padL + i * colW + 5;
           return (
             <g key={m.label}>
-              <rect x={x0} y={yb(m.budget)} width={bw} height={padT + innerH - yb(m.budget)} className="fill-slate-400/70" rx="1.5">
+              <rect x={x0} y={y(m.budget)} width={bw} height={padT + innerH - y(m.budget)} className="fill-slate-400/70" rx="1.5">
                 <title>{m.label} Budget: {fmt(m.budget)}</title>
               </rect>
-              <rect x={x0 + bw} y={yb(m.actual)} width={bw} height={padT + innerH - yb(m.actual)} className="fill-emerald-500/80" rx="1.5">
+              <rect x={x0 + bw} y={y(m.actual)} width={bw} height={padT + innerH - y(m.actual)} className="fill-emerald-500/80" rx="1.5">
                 <title>{m.label} Actual: {fmt(m.actual)}</title>
               </rect>
-              <rect x={x0 + 2 * bw} y={yb(m.forecast)} width={bw} height={padT + innerH - yb(m.forecast)} className="fill-orange-400/80" rx="1.5">
+              <rect x={x0 + 2 * bw} y={y(m.forecast)} width={bw} height={padT + innerH - y(m.forecast)} className="fill-orange-400/80" rx="1.5">
                 <title>{m.label} Forecast: {fmt(m.forecast)}</title>
               </rect>
               <text
@@ -239,9 +237,9 @@ function ComboChart({ months }) {
           );
         })}
 
-        <path d={linePath("cumBudget", yl)} fill="none" className="stroke-slate-400" strokeWidth="2" strokeDasharray="4 3" />
-        <path d={linePath("cumActual", yl)} fill="none" className="stroke-emerald-500" strokeWidth="2.5" />
-        <path d={linePath("cumForecast", yl)} fill="none" className="stroke-orange-500" strokeWidth="2.5" strokeDasharray="5 3" />
+        <path d={linePath("cumBudget")} fill="none" className="stroke-slate-400" strokeWidth="2" strokeDasharray="4 3" />
+        <path d={linePath("cumActual")} fill="none" className="stroke-emerald-500" strokeWidth="2.5" />
+        <path d={linePath("cumForecast")} fill="none" className="stroke-orange-500" strokeWidth="2.5" strokeDasharray="5 3" />
       </svg>
       <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500">
         <Legend cls="bg-slate-400/70" label="Monthly Budget" />
