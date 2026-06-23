@@ -197,7 +197,13 @@ function ComboChart({ months }) {
       })
       .join(" ");
 
-  const bw = (colW - 10) / 3;
+  const cx = (i) => padL + i * colW + colW / 2;
+  const linePts = (key) => months.map((m, i) => [cx(i), y(m[key])]);
+  // light bars are secondary; the cumulative S-curves are the hero, in distinct colors
+  const gap = Math.max(8, colW * 0.34);
+  const bw = (colW - gap) / 3;
+  const x0 = (i) => padL + i * colW + gap / 2;
+
   return (
     <div className="overflow-x-auto">
       <svg width={W} height={H} className="block">
@@ -210,42 +216,53 @@ function ComboChart({ months }) {
           </g>
         ))}
 
-        {months.map((m, i) => {
-          const x0 = padL + i * colW + 5;
+        {months.map((m, i) => (
+          <g key={m.label}>
+            <rect x={x0(i)} y={y(m.budget)} width={bw} height={padT + innerH - y(m.budget)} className="fill-slate-300/70 dark:fill-slate-500/50" rx="1.5">
+              <title>{m.label} Budget: {fmt(m.budget)}</title>
+            </rect>
+            <rect x={x0(i) + bw} y={y(m.actual)} width={bw} height={padT + innerH - y(m.actual)} className="fill-emerald-300/70 dark:fill-emerald-400/40" rx="1.5">
+              <title>{m.label} Actual: {fmt(m.actual)}</title>
+            </rect>
+            <rect x={x0(i) + 2 * bw} y={y(m.forecast)} width={bw} height={padT + innerH - y(m.forecast)} className="fill-orange-300/70 dark:fill-orange-400/40" rx="1.5">
+              <title>{m.label} Forecast: {fmt(m.forecast)}</title>
+            </rect>
+            <text
+              x={cx(i)}
+              y={H - padB + 16}
+              textAnchor={months.length > 8 ? "end" : "middle"}
+              className="fill-slate-400"
+              fontSize="10"
+              transform={months.length > 8 ? `rotate(-40 ${cx(i)} ${H - padB + 16})` : undefined}
+            >
+              {m.label}
+            </text>
+          </g>
+        ))}
+
+        {/* cumulative S-curves — solid, distinct colors, with point markers */}
+        {[
+          { key: "cumBudget", cls: "stroke-brand-500", dot: "fill-brand-500" },
+          { key: "cumActual", cls: "stroke-emerald-500", dot: "fill-emerald-500" },
+          { key: "cumForecast", cls: "stroke-orange-500", dot: "fill-orange-500" },
+        ].map((s) => {
+          const pts = linePts(s.key);
+          const d = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
           return (
-            <g key={m.label}>
-              <rect x={x0} y={y(m.budget)} width={bw} height={padT + innerH - y(m.budget)} className="fill-slate-400/70" rx="1.5">
-                <title>{m.label} Budget: {fmt(m.budget)}</title>
-              </rect>
-              <rect x={x0 + bw} y={y(m.actual)} width={bw} height={padT + innerH - y(m.actual)} className="fill-emerald-500/80" rx="1.5">
-                <title>{m.label} Actual: {fmt(m.actual)}</title>
-              </rect>
-              <rect x={x0 + 2 * bw} y={y(m.forecast)} width={bw} height={padT + innerH - y(m.forecast)} className="fill-orange-400/80" rx="1.5">
-                <title>{m.label} Forecast: {fmt(m.forecast)}</title>
-              </rect>
-              <text
-                x={padL + i * colW + colW / 2}
-                y={H - padB + 14}
-                textAnchor="end"
-                className="fill-slate-400"
-                fontSize="9"
-                transform={`rotate(-45 ${padL + i * colW + colW / 2} ${H - padB + 14})`}
-              >
-                {m.label}
-              </text>
+            <g key={s.key}>
+              <path d={d} fill="none" className={s.cls} strokeWidth="2.5" strokeLinejoin="round" />
+              {pts.map((p, i) => (
+                <circle key={i} cx={p[0]} cy={p[1]} r="2.5" className={s.dot} />
+              ))}
             </g>
           );
         })}
-
-        <path d={linePath("cumBudget")} fill="none" className="stroke-slate-400" strokeWidth="2" strokeDasharray="4 3" />
-        <path d={linePath("cumActual")} fill="none" className="stroke-emerald-500" strokeWidth="2.5" />
-        <path d={linePath("cumForecast")} fill="none" className="stroke-orange-500" strokeWidth="2.5" strokeDasharray="5 3" />
       </svg>
       <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500">
-        <Legend cls="bg-slate-400/70" label="Monthly Budget" />
-        <Legend cls="bg-emerald-500/80" label="Monthly Actual" />
-        <Legend cls="bg-orange-400/80" label="Monthly Forecast" />
-        <span className="ml-2 flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-slate-400" /> Cum. Budget</span>
+        <Legend cls="bg-slate-300/70 dark:bg-slate-500/50" label="Monthly Budget" />
+        <Legend cls="bg-emerald-300/70 dark:bg-emerald-400/40" label="Monthly Actual" />
+        <Legend cls="bg-orange-300/70 dark:bg-orange-400/40" label="Monthly Forecast" />
+        <span className="ml-2 flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-brand-500" /> Cum. Budget</span>
         <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-emerald-500" /> Cum. Actual</span>
         <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-orange-500" /> Cum. Forecast</span>
       </div>
