@@ -17,6 +17,7 @@ import TemplateEditor from "./pages/TemplateEditor.jsx";
 import Projects from "./pages/Projects.jsx";
 import Report from "./pages/Report.jsx";
 import Finance from "./pages/Finance.jsx";
+import FinancialReport from "./pages/FinancialReport.jsx";
 
 function useTheme() {
   const [dark, setDark] = useState(
@@ -44,7 +45,10 @@ const SUB_TABS = {
     { id: "report", label: "Status Report", icon: BarChart3 },
     { id: "template", label: "Task template", icon: ListChecks },
   ],
-  financial: [{ id: "budget", label: "Budget Details", icon: Wallet }],
+  financial: [
+    { id: "budget", label: "Budget Details", icon: Wallet },
+    { id: "finreport", label: "Financial Report", icon: BarChart3 },
+  ],
   projects: [],
 };
 
@@ -257,7 +261,11 @@ export default function App() {
             <TemplateEditor project={project} />
           )
         ) : mainTab === "financial" ? (
-          <Finance project={project} onProjectChange={loadProjects} />
+          subTab === "finreport" ? (
+            <FinancialReport project={project} />
+          ) : (
+            <Finance project={project} onProjectChange={loadProjects} />
+          )
         ) : null}
       </main>
 

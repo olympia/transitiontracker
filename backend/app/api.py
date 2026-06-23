@@ -864,17 +864,12 @@ def delete_category(cat_id: int, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------- finance view
-@router.get(
-    "/financial-years/{year_id}/view", response_model=schemas.FinanceYearData
-)
-def get_finance_view(year_id: int, db: Session = Depends(get_db)):
-    """Raw nested data for a year. Aggregates and currency conversion are
-    computed client-side from the monthly values."""
-    year = _get_year(db, year_id)
+def _assemble_year(db: Session, year: models.FinancialYear) -> schemas.FinanceYearData:
+    """Raw nested data for one year (project + year + legs/items/months/CRs)."""
     project = db.get(models.Project, year.project_id)
     legs = (
         db.query(models.WbsLeg)
-        .filter(models.WbsLeg.year_id == year_id)
+        .filter(models.WbsLeg.year_id == year.id)
         .order_by(models.WbsLeg.position, models.WbsLeg.id)
         .all()
     )
@@ -910,9 +905,39 @@ def get_finance_view(year_id: int, db: Session = Depends(get_db)):
                 ],
             )
         )
-    db.commit()
     return schemas.FinanceYearData(
         project=schemas.ProjectOut.model_validate(project),
         year=schemas.FinancialYearOut.model_validate(year),
         legs=leg_views,
     )
+
+
+@router.get(
+    "/financial-years/{year_id}/view", response_model=schemas.FinanceYearData
+)
+def get_finance_view(year_id: int, db: Session = Depends(get_db)):
+    """Raw nested data for a year. Aggregates and currency conversion are
+    computed client-side from the monthly values."""
+    year = _get_year(db, year_id)
+    data = _assemble_year(db, year)
+    db.commit()
+    return data
+
+
+@router.get(
+    "/projects/{project_id}/finance-data",
+    response_model=list[schemas.FinanceYearData],
+)
+def get_finance_data(project_id: int, db: Session = Depends(get_db)):
+    """All budget years' raw data for a project, chronological — for the
+    Financial Report (charts computed client-side)."""
+    _get_project(db, project_id)
+    years = (
+        db.query(models.FinancialYear)
+        .filter(models.FinancialYear.project_id == project_id)
+        .order_by(models.FinancialYear.year)
+        .all()
+    )
+    out = [_assemble_year(db, y) for y in years]
+    db.commit()
+    return out

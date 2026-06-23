@@ -61,6 +61,7 @@ export const api = {
   updateYear: (id, y) => req("PUT", `/financial-years/${id}`, y),
   deleteYear: (id) => req("DELETE", `/financial-years/${id}`),
   financeView: (yearId) => req("GET", `/financial-years/${yearId}/view`),
+  financeData: (pid) => req("GET", `/projects/${pid}/finance-data`),
   // wbs legs
   listLegs: (yearId) => req("GET", `/financial-years/${yearId}/wbs-legs`),
   createLeg: (yearId, l) => req("POST", `/financial-years/${yearId}/wbs-legs`, l),
