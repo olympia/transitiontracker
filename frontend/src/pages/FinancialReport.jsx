@@ -42,44 +42,46 @@ export default function FinancialReport({ project }) {
     for (const yd of data) {
       const cutoff = yd.year.forecast_from_month ?? 1;
       for (let mo = 1; mo <= 12; mo++) {
-        let budget = 0;
-        let actual = 0;
-        let forecast = 0;
+        let budget = 0; // original budget (regular items, no CRs)
+        let budgetCrs = 0; // budget incl. CR rows
+        let realized = 0; // actual (elapsed) or forecast (future)
         for (const leg of yd.legs)
           for (const it of leg.items) {
-            if (it.is_cr) continue;
             const mm = it.months.find((x) => x.month === mo);
             if (!mm) continue;
-            budget += monthAmount(it, mm, "budget");
-            const rv = monthAmount(it, mm, "realized");
-            if (mo < cutoff) actual += rv;
-            else forecast += rv;
+            const bv = monthAmount(it, mm, "budget");
+            budgetCrs += bv;
+            if (!it.is_cr) {
+              budget += bv;
+              realized += monthAmount(it, mm, "realized");
+            }
           }
         months.push({
           label: `${String(mo).padStart(2, "0")}.${yd.year.year}`,
           budget,
-          actual,
-          forecast,
+          budgetCrs,
+          realized,
+          isForecast: mo >= cutoff,
         });
       }
     }
     // trim leading/trailing all-zero months
-    const nz = (m) => m.budget || m.actual || m.forecast;
+    const nz = (m) => m.budget || m.budgetCrs || m.realized;
     let s = months.findIndex(nz);
     let e = months.length - 1;
     while (e >= 0 && !nz(months[e])) e--;
     months = s === -1 ? [] : months.slice(s, e + 1);
-    // cumulative
+    // cumulative curves
     let cb = 0;
-    let ca = 0;
-    let cf = 0;
+    let cbc = 0;
+    let cr = 0;
     for (const m of months) {
       cb += m.budget;
-      ca += m.actual;
-      cf += m.actual + m.forecast;
+      cbc += m.budgetCrs;
+      cr += m.realized;
       m.cumBudget = cb;
-      m.cumActual = ca;
-      m.cumForecast = cf;
+      m.cumBudgetCrs = cbc;
+      m.cumRealized = cr;
     }
 
     // utilization figures (all years)
@@ -175,35 +177,25 @@ function ComboChart({ months }) {
   const padR = 20;
   const padT = 16;
   const padB = 64;
-  const colW = Math.max(42, Math.min(72, 720 / Math.max(months.length, 1)));
+  const colW = Math.max(46, Math.min(78, 760 / Math.max(months.length, 1)));
   const W = padL + padR + months.length * colW;
   const innerH = H - padT - padB;
 
-  // single shared scale so the cumulative curves read correctly against the bars
   const maxVal = niceMax(
-    Math.max(
-      1,
-      ...months.flatMap((m) => [m.budget, m.actual, m.forecast, m.cumBudget, m.cumActual, m.cumForecast])
-    )
+    Math.max(1, ...months.flatMap((m) => [m.budgetCrs, m.realized, m.cumBudget, m.cumBudgetCrs, m.cumRealized]))
   );
   const y = (v) => padT + innerH - (v / maxVal) * innerH;
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxVal);
 
-  const linePath = (key) =>
-    months
-      .map((m, i) => {
-        const cx = padL + i * colW + colW / 2;
-        return `${i ? "L" : "M"}${cx.toFixed(1)},${y(m[key]).toFixed(1)}`;
-      })
-      .join(" ");
-
   const cx = (i) => padL + i * colW + colW / 2;
-  const linePts = (key) => months.map((m, i) => [cx(i), y(m[key])]);
-  // two bars per month (Budget + the realized one), centered on the month axis
-  // so the cumulative point markers sit exactly above the bar group's centre
-  const bw = Math.max(6, colW * 0.2);
-  const innerGap = Math.max(2, colW * 0.06);
+  const bw = Math.max(7, colW * 0.22);
+  const innerGap = Math.max(3, colW * 0.08);
   const groupW = 2 * bw + innerGap;
+  // budget bar (left) and actual/forecast bar (right) centres — the lines track these
+  const budgetCx = (i) => cx(i) - groupW / 2 + bw / 2;
+  const realCx = (i) => cx(i) - groupW / 2 + bw + innerGap + bw / 2;
+  const budgetPath = (key) =>
+    months.map((m, i) => `${i ? "L" : "M"}${budgetCx(i).toFixed(1)},${y(m[key]).toFixed(1)}`).join(" ");
 
   return (
     <div className="overflow-x-auto">
@@ -218,33 +210,29 @@ function ComboChart({ months }) {
         ))}
 
         {months.map((m, i) => {
-          const c = cx(i);
-          const left = c - groupW / 2;
-          const realized = m.actual + m.forecast;
-          const isFc = m.forecast > 0;
+          const left = cx(i) - groupW / 2;
           return (
             <g key={m.label}>
-              <line x1={c} x2={c} y1={padT} y2={padT + innerH} className="stroke-slate-100 dark:stroke-slate-800/50" strokeWidth="1" />
-              <rect x={left} y={y(m.budget)} width={bw} height={padT + innerH - y(m.budget)} className="fill-slate-300/70 dark:fill-slate-500/50" rx="1.5">
-                <title>{m.label} Budget: {fmt(m.budget)}</title>
+              <rect x={left} y={y(m.budgetCrs)} width={bw} height={padT + innerH - y(m.budgetCrs)} className="fill-slate-300/70 dark:fill-slate-500/50" rx="1.5">
+                <title>{m.label} Budget (with CRs): {fmt(m.budgetCrs)}</title>
               </rect>
               <rect
                 x={left + bw + innerGap}
-                y={y(realized)}
+                y={y(m.realized)}
                 width={bw}
-                height={padT + innerH - y(realized)}
-                className={isFc ? "fill-orange-300/70 dark:fill-orange-400/40" : "fill-emerald-300/70 dark:fill-emerald-400/40"}
+                height={padT + innerH - y(m.realized)}
+                className={m.isForecast ? "fill-orange-300/70 dark:fill-orange-400/40" : "fill-emerald-300/70 dark:fill-emerald-400/40"}
                 rx="1.5"
               >
-                <title>{m.label} {isFc ? "Forecast" : "Actual"}: {fmt(realized)}</title>
+                <title>{m.label} {m.isForecast ? "Forecast" : "Actual"}: {fmt(m.realized)}</title>
               </rect>
               <text
-                x={c}
+                x={cx(i)}
                 y={H - padB + 16}
                 textAnchor={months.length > 8 ? "end" : "middle"}
                 className="fill-slate-400"
                 fontSize="10"
-                transform={months.length > 8 ? `rotate(-40 ${c} ${H - padB + 16})` : undefined}
+                transform={months.length > 8 ? `rotate(-40 ${cx(i)} ${H - padB + 16})` : undefined}
               >
                 {m.label}
               </text>
@@ -252,31 +240,42 @@ function ComboChart({ months }) {
           );
         })}
 
-        {/* cumulative S-curves — solid, distinct colors, with point markers */}
-        {[
-          { key: "cumBudget", cls: "stroke-brand-500", dot: "fill-brand-500" },
-          { key: "cumActual", cls: "stroke-emerald-500", dot: "fill-emerald-500" },
-          { key: "cumForecast", cls: "stroke-orange-500", dot: "fill-orange-500" },
-        ].map((s) => {
-          const pts = linePts(s.key);
-          const d = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
-          return (
-            <g key={s.key}>
-              <path d={d} fill="none" className={s.cls} strokeWidth="2.5" strokeLinejoin="round" />
-              {pts.map((p, i) => (
-                <circle key={i} cx={p[0]} cy={p[1]} r="2.5" className={s.dot} />
-              ))}
-            </g>
-          );
-        })}
+        {/* budget lines — above the budget bar */}
+        <path d={budgetPath("cumBudget")} fill="none" className="stroke-slate-400" strokeWidth="2" strokeDasharray="4 3" />
+        {months.map((m, i) => (
+          <circle key={`b${i}`} cx={budgetCx(i)} cy={y(m.cumBudget)} r="2" className="fill-slate-400" />
+        ))}
+        <path d={budgetPath("cumBudgetCrs")} fill="none" className="stroke-brand-500" strokeWidth="2.5" strokeLinejoin="round" />
+        {months.map((m, i) => (
+          <circle key={`bc${i}`} cx={budgetCx(i)} cy={y(m.cumBudgetCrs)} r="2.5" className="fill-brand-500" />
+        ))}
+
+        {/* actual→forecast line — above the actual/forecast bar; green up to cutover, then orange */}
+        {months.map((m, i) =>
+          i > 0 ? (
+            <line
+              key={`s${i}`}
+              x1={realCx(i - 1)}
+              y1={y(months[i - 1].cumRealized)}
+              x2={realCx(i)}
+              y2={y(m.cumRealized)}
+              className={m.isForecast ? "stroke-orange-500" : "stroke-emerald-500"}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+          ) : null
+        )}
+        {months.map((m, i) => (
+          <circle key={`r${i}`} cx={realCx(i)} cy={y(m.cumRealized)} r="2.5" className={m.isForecast ? "fill-orange-500" : "fill-emerald-500"} />
+        ))}
       </svg>
       <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500">
-        <Legend cls="bg-slate-300/70 dark:bg-slate-500/50" label="Monthly Budget" />
+        <Legend cls="bg-slate-300/70 dark:bg-slate-500/50" label="Monthly Budget (with CRs)" />
         <Legend cls="bg-emerald-300/70 dark:bg-emerald-400/40" label="Monthly Actual" />
         <Legend cls="bg-orange-300/70 dark:bg-orange-400/40" label="Monthly Forecast" />
-        <span className="ml-2 flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-brand-500" /> Cum. Budget</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-emerald-500" /> Cum. Actual</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-orange-500" /> Cum. Forecast</span>
+        <span className="ml-2 flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 border-t-2 border-dashed border-slate-400" /> Cum. Budget</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-brand-500" /> Cum. Budget (with CRs)</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-gradient-to-r from-emerald-500 to-orange-500" /> Cum. Actual → Forecast</span>
       </div>
     </div>
   );
