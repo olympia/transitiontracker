@@ -163,12 +163,37 @@ export default function FinancialReport({ project }) {
   );
 }
 
-function niceMax(v) {
-  if (v <= 0) return 1;
-  const mag = Math.pow(10, Math.floor(Math.log10(v)));
-  const n = v / mag;
-  const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
-  return step * mag;
+// tight axis: ~4 intervals, rounded to a clean step just above the data max
+function axisScale(v) {
+  if (v <= 0) return { max: 1, ticks: [0, 1] };
+  const raw = v / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+  const step = nice * mag;
+  const max = Math.ceil(v / step) * step;
+  const ticks = [];
+  for (let t = 0; t <= max + step / 2; t += step) ticks.push(t);
+  return { max, ticks };
+}
+
+// Catmull-Rom → cubic Bézier, for smooth curves through the points
+function smoothPath(pts) {
+  if (!pts.length) return "";
+  if (pts.length < 3) return pts.map((p, i) => `${i ? "L" : "M"}${p[0]},${p[1]}`).join(" ");
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0]},${p2[1]}`;
+  }
+  return d;
 }
 
 function ComboChart({ months }) {
@@ -181,48 +206,88 @@ function ComboChart({ months }) {
   const W = padL + padR + months.length * colW;
   const innerH = H - padT - padB;
 
-  const maxVal = niceMax(
+  const { max: maxVal, ticks } = axisScale(
     Math.max(1, ...months.flatMap((m) => [m.budgetCrs, m.realized, m.cumBudget, m.cumBudgetCrs, m.cumRealized]))
   );
   const y = (v) => padT + innerH - (v / maxVal) * innerH;
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxVal);
+  const base = padT + innerH;
 
   const cx = (i) => padL + i * colW + colW / 2;
   const bw = Math.max(7, colW * 0.22);
   const innerGap = Math.max(3, colW * 0.08);
   const groupW = 2 * bw + innerGap;
-  // budget bar (left) and actual/forecast bar (right) centres — the lines track these
   const budgetCx = (i) => cx(i) - groupW / 2 + bw / 2;
   const realCx = (i) => cx(i) - groupW / 2 + bw + innerGap + bw / 2;
-  const budgetPath = (key) =>
-    months.map((m, i) => `${i ? "L" : "M"}${budgetCx(i).toFixed(1)},${y(m[key]).toFixed(1)}`).join(" ");
+
+  const bcrsPts = months.map((m, i) => [budgetCx(i), y(m.cumBudgetCrs)]);
+  const bPts = months.map((m, i) => [budgetCx(i), y(m.cumBudget)]);
+  const rPts = months.map((m, i) => [realCx(i), y(m.cumRealized)]);
+  const areaUnder = (pts) =>
+    pts.length ? `${smoothPath(pts)} L${pts[pts.length - 1][0]},${base} L${pts[0][0]},${base} Z` : "";
+
+  // where green (actual) turns to orange (forecast) along the realized line
+  const ffi = months.findIndex((m) => m.isForecast);
+  const rx0 = realCx(0);
+  const rxN = realCx(months.length - 1);
+  const cutFrac =
+    ffi < 0 ? 1 : ffi === 0 ? 0 : Math.max(0, Math.min(1, (realCx(ffi) - rx0) / Math.max(1, rxN - rx0)));
 
   return (
     <div className="overflow-x-auto">
       <svg width={W} height={H} className="block">
+        <defs>
+          <linearGradient id="frBudgetArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#3366ff" stopOpacity="0.22" />
+            <stop offset="1" stopColor="#3366ff" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="frRealStroke" gradientUnits="userSpaceOnUse" x1={rx0} y1="0" x2={rxN} y2="0">
+            <stop offset="0" stopColor="#10b981" />
+            <stop offset={cutFrac} stopColor="#10b981" />
+            <stop offset={cutFrac} stopColor="#f97316" />
+            <stop offset="1" stopColor="#f97316" />
+          </linearGradient>
+          <linearGradient id="frRealArea" gradientUnits="userSpaceOnUse" x1={rx0} y1="0" x2={rxN} y2="0">
+            <stop offset="0" stopColor="#10b981" stopOpacity="0.16" />
+            <stop offset={cutFrac} stopColor="#10b981" stopOpacity="0.16" />
+            <stop offset={cutFrac} stopColor="#f97316" stopOpacity="0.16" />
+            <stop offset="1" stopColor="#f97316" stopOpacity="0.16" />
+          </linearGradient>
+          <filter id="frGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.4" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} className="stroke-slate-200 dark:stroke-slate-800" strokeWidth="1" />
+            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} className="stroke-slate-100 dark:stroke-slate-800/70" strokeWidth="1" />
             <text x={padL - 8} y={y(t) + 4} textAnchor="end" className="fill-slate-400" fontSize="10">
               {fmtShort(t)}
             </text>
           </g>
         ))}
 
+        {/* soft area fills */}
+        <path d={areaUnder(rPts)} fill="url(#frRealArea)" />
+        <path d={areaUnder(bcrsPts)} fill="url(#frBudgetArea)" />
+
         {months.map((m, i) => {
           const left = cx(i) - groupW / 2;
           return (
             <g key={m.label}>
-              <rect x={left} y={y(m.budgetCrs)} width={bw} height={padT + innerH - y(m.budgetCrs)} className="fill-slate-300/70 dark:fill-slate-500/50" rx="1.5">
+              <rect x={left} y={y(m.budgetCrs)} width={bw} height={base - y(m.budgetCrs)} className="fill-slate-300/60 dark:fill-slate-500/40" rx="2.5">
                 <title>{m.label} Budget (with CRs): {fmt(m.budgetCrs)}</title>
               </rect>
               <rect
                 x={left + bw + innerGap}
                 y={y(m.realized)}
                 width={bw}
-                height={padT + innerH - y(m.realized)}
-                className={m.isForecast ? "fill-orange-300/70 dark:fill-orange-400/40" : "fill-emerald-300/70 dark:fill-emerald-400/40"}
-                rx="1.5"
+                height={base - y(m.realized)}
+                className={m.isForecast ? "fill-orange-300/60 dark:fill-orange-400/30" : "fill-emerald-300/60 dark:fill-emerald-400/30"}
+                rx="2.5"
               >
                 <title>{m.label} {m.isForecast ? "Forecast" : "Actual"}: {fmt(m.realized)}</title>
               </rect>
@@ -240,42 +305,28 @@ function ComboChart({ months }) {
           );
         })}
 
-        {/* budget lines — above the budget bar */}
-        <path d={budgetPath("cumBudget")} fill="none" className="stroke-slate-400" strokeWidth="2" strokeDasharray="4 3" />
-        {months.map((m, i) => (
-          <circle key={`b${i}`} cx={budgetCx(i)} cy={y(m.cumBudget)} r="2" className="fill-slate-400" />
-        ))}
-        <path d={budgetPath("cumBudgetCrs")} fill="none" className="stroke-brand-500" strokeWidth="2.5" strokeLinejoin="round" />
-        {months.map((m, i) => (
-          <circle key={`bc${i}`} cx={budgetCx(i)} cy={y(m.cumBudgetCrs)} r="2.5" className="fill-brand-500" />
-        ))}
+        {/* cumulative original budget — thin, secondary */}
+        <path d={smoothPath(bPts)} fill="none" className="stroke-slate-400/80" strokeWidth="1.6" strokeDasharray="4 4" />
+        {/* cumulative budget with CRs — hero, glowing */}
+        <path d={smoothPath(bcrsPts)} fill="none" stroke="#3366ff" strokeWidth="2.6" strokeLinecap="round" filter="url(#frGlow)" />
+        {/* cumulative actual → forecast — gradient, glowing */}
+        <path d={smoothPath(rPts)} fill="none" stroke="url(#frRealStroke)" strokeWidth="2.6" strokeLinecap="round" filter="url(#frGlow)" />
 
-        {/* actual→forecast line — above the actual/forecast bar; green up to cutover, then orange */}
-        {months.map((m, i) =>
-          i > 0 ? (
-            <line
-              key={`s${i}`}
-              x1={realCx(i - 1)}
-              y1={y(months[i - 1].cumRealized)}
-              x2={realCx(i)}
-              y2={y(m.cumRealized)}
-              className={m.isForecast ? "stroke-orange-500" : "stroke-emerald-500"}
-              strokeWidth="2.5"
-              strokeLinecap="round"
-            />
-          ) : null
-        )}
+        {/* point markers above each bar */}
         {months.map((m, i) => (
-          <circle key={`r${i}`} cx={realCx(i)} cy={y(m.cumRealized)} r="2.5" className={m.isForecast ? "fill-orange-500" : "fill-emerald-500"} />
+          <g key={`d${i}`}>
+            <circle cx={budgetCx(i)} cy={y(m.cumBudgetCrs)} r="2.6" fill="#3366ff" />
+            <circle cx={realCx(i)} cy={y(m.cumRealized)} r="2.6" fill={m.isForecast ? "#f97316" : "#10b981"} />
+          </g>
         ))}
       </svg>
       <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500">
-        <Legend cls="bg-slate-300/70 dark:bg-slate-500/50" label="Monthly Budget (with CRs)" />
-        <Legend cls="bg-emerald-300/70 dark:bg-emerald-400/40" label="Monthly Actual" />
-        <Legend cls="bg-orange-300/70 dark:bg-orange-400/40" label="Monthly Forecast" />
+        <Legend cls="bg-slate-300/60 dark:bg-slate-500/40" label="Monthly Budget (with CRs)" />
+        <Legend cls="bg-emerald-300/60 dark:bg-emerald-400/30" label="Monthly Actual" />
+        <Legend cls="bg-orange-300/60 dark:bg-orange-400/30" label="Monthly Forecast" />
         <span className="ml-2 flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 border-t-2 border-dashed border-slate-400" /> Cum. Budget</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-brand-500" /> Cum. Budget (with CRs)</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-gradient-to-r from-emerald-500 to-orange-500" /> Cum. Actual → Forecast</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 rounded bg-brand-500" /> Cum. Budget (with CRs)</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 rounded bg-gradient-to-r from-emerald-500 to-orange-500" /> Cum. Actual → Forecast</span>
       </div>
     </div>
   );
