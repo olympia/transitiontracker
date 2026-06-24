@@ -35,11 +35,22 @@ export default function FinancialReport({ project }) {
 
   const base = data?.[0]?.project.base_currency || project.base_currency || "";
 
+  const [sel, setSel] = useState("overall");
+  const years = useMemo(
+    () => (data ? [...new Set(data.map((d) => d.year.year))].sort((a, b) => a - b) : []),
+    [data]
+  );
+  const curSel = sel === "overall" || years.includes(sel) ? sel : "overall";
+  const scoped = useMemo(() => {
+    if (!data) return [];
+    return curSel === "overall" ? data : data.filter((yd) => yd.year.year === curSel);
+  }, [data, curSel]);
+
   const model = useMemo(() => {
-    if (!data || data.length === 0) return null;
-    // monthly timeline across all years, chronological
+    if (!scoped || scoped.length === 0) return null;
+    // monthly timeline (chronological); for a single year just its 12 months
     let months = [];
-    for (const yd of data) {
+    for (const yd of scoped) {
       const cutoff = yd.year.forecast_from_month ?? 1;
       for (let mo = 1; mo <= 12; mo++) {
         let budget = 0; // original budget (regular items, no CRs)
@@ -84,13 +95,13 @@ export default function FinancialReport({ project }) {
       m.cumRealized = cr;
     }
 
-    // utilization figures (all years)
+    // utilization figures (for the selected scope)
     let actualTot = 0;
     let obligo = 0;
     let open = 0;
     let regBudget = 0;
     let crBudget = 0;
-    for (const yd of data) {
+    for (const yd of scoped) {
       const cutoff = yd.year.forecast_from_month ?? 1;
       for (const leg of yd.legs)
         for (const it of leg.items)
@@ -107,10 +118,10 @@ export default function FinancialReport({ project }) {
     }
     const budgetWithCrs = regBudget + crBudget;
     return { months, actualTot, obligo, open, budgetWithCrs };
-  }, [data]);
+  }, [scoped]);
 
   if (loading && !data) return <Spinner />;
-  if (!model || model.months.length === 0)
+  if (!data || data.length === 0)
     return (
       <EmptyState
         icon={BarChart3}
@@ -119,10 +130,43 @@ export default function FinancialReport({ project }) {
       />
     );
 
+  const pillCls = (active) =>
+    `rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+      active
+        ? "bg-white text-brand-600 shadow-soft dark:bg-slate-900"
+        : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+    }`;
+
+  const yearPicker = (
+    <div className="flex flex-wrap items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/70">
+      <button onClick={() => setSel("overall")} className={pillCls(curSel === "overall")}>
+        Overall
+      </button>
+      {years.map((yr) => (
+        <button key={yr} onClick={() => setSel(yr)} className={pillCls(curSel === yr)}>
+          {yr}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (!model)
+    return (
+      <div className="space-y-6">
+        {yearPicker}
+        <EmptyState
+          icon={BarChart3}
+          title={`No data for ${curSel === "overall" ? "the project" : curSel}`}
+          subtitle="Enter monthly Budget / Actual / Forecast values in Budget Details."
+        />
+      </div>
+    );
+
   const { months, actualTot, obligo, open, budgetWithCrs } = model;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {yearPicker}
       <section>
         <div className="mb-1 flex items-center gap-2">
           <TrendingUp size={18} className="text-brand-600" />
