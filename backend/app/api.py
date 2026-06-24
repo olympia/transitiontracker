@@ -243,6 +243,7 @@ def _entity_detail(db: Session, entity: models.Entity) -> schemas.EntityDetail:
     inst_by_def = {i.task_def_id: i for i in entity.instances}
     tasks = []
     cell_statuses = []
+    golive_status = None
     for d in defs:
         inst = inst_by_def.get(d.id)
         if inst is None:
@@ -259,6 +260,8 @@ def _entity_detail(db: Session, entity: models.Entity) -> schemas.EntityDetail:
         )
         if entity.on_hold and st["status"] in ("overdue", "duesoon", "future"):
             st["status"] = "onhold"
+        if d.is_golive:
+            golive_status = st["status"]
         cell_statuses.append(st["status"])
         tasks.append(
             schemas.TaskCellDetail(
@@ -277,7 +280,7 @@ def _entity_detail(db: Session, entity: models.Entity) -> schemas.EntityDetail:
             )
         )
     overall = status_logic.overall_status(
-        entity.on_hold, entity.golive_date, cell_statuses
+        entity.on_hold, entity.golive_date, cell_statuses, golive_status
     )
     base = schemas.EntityOut.model_validate(entity).model_dump()
     return schemas.EntityDetail(
@@ -422,6 +425,7 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
         cells = []
         cell_statuses = []
         overdue_count = 0
+        golive_status = None
         for d in defs:
             inst = inst_by_def.get(d.id)
             if inst is None:
@@ -441,6 +445,8 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
                 st["status"] = "onhold"
             if st["status"] == "overdue":
                 overdue_count += 1
+            if d.is_golive:
+                golive_status = st["status"]
             cell_statuses.append(st["status"])
             cells.append(
                 schemas.MatrixCell(
@@ -451,7 +457,9 @@ def get_matrix(project_id: int, db: Session = Depends(get_db)):
                     actual_date=st["actual_date"],
                 )
             )
-        overall = status_logic.overall_status(e.on_hold, e.golive_date, cell_statuses)
+        overall = status_logic.overall_status(
+            e.on_hold, e.golive_date, cell_statuses, golive_status
+        )
         next_steps_due = sum(
             1
             for i in e.instances

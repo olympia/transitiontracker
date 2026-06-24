@@ -7,14 +7,16 @@ Per task (entity x task definition):
   - planned in the further future -> "future" (grey)
   - no go-live date, or task has no deadline -> "none" (blank)
 
-Per entity (overall) = the worst status among its tasks, unless on hold:
+Per entity (overall) = the status of its go-live milestone task (go-live-centric):
   - on hold        -> "onhold"  (blue, overrides everything)
   - no go-live     -> "none"
-  - any overdue    -> "delayed"   (red)
-  - else any duesoon -> "duesoon" (orange)
-  - else any future  -> "ontrack" (grey: not done, but nothing pressing)
-  - else all done    -> "completed" (green)
-"none" tasks (no deadline / no go-live) are ignored in the roll-up.
+  - go-live done   -> "completed" (green)
+  - go-live overdue -> "delayed"  (red)
+  - go-live duesoon -> "duesoon"  (orange)
+  - go-live future  -> "ontrack"  (grey: scheduled, nothing pressing)
+Per-task signals live in the task-level cells/chips, not the entity roll-up.
+If no go-live task is defined, fall back to the worst status among all tasks
+("none" tasks are ignored in that fallback).
 """
 from datetime import date, timedelta
 
@@ -58,11 +60,27 @@ def task_status(
     }
 
 
-def overall_status(on_hold: bool, golive: date | None, cell_statuses: list[str]) -> str:
+def overall_status(
+    on_hold: bool,
+    golive: date | None,
+    cell_statuses: list[str],
+    golive_status: str | None = None,
+) -> str:
     if on_hold:
         return "onhold"
     if golive is None:
         return "none"
+    # Go-live-centric: the entity's overall status follows its go-live
+    # milestone task. Per-task signals live in the task-level cells/chips.
+    if golive_status is not None:
+        return {
+            "done": "completed",
+            "overdue": "delayed",
+            "duesoon": "duesoon",
+            "future": "ontrack",
+            "none": "none",
+        }.get(golive_status, "none")
+    # Fallback (no go-live task defined): worst status among all tasks.
     countable = [s for s in cell_statuses if s != "none"]
     if "overdue" in countable:
         return "delayed"
