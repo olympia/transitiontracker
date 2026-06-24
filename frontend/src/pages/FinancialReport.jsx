@@ -199,10 +199,11 @@ function ComboChart({ months }) {
 
   const cx = (i) => padL + i * colW + colW / 2;
   const linePts = (key) => months.map((m, i) => [cx(i), y(m[key])]);
-  // light bars are secondary; the cumulative S-curves are the hero, in distinct colors
-  const gap = Math.max(8, colW * 0.34);
-  const bw = (colW - gap) / 3;
-  const x0 = (i) => padL + i * colW + gap / 2;
+  // two bars per month (Budget + the realized one), centered on the month axis
+  // so the cumulative point markers sit exactly above the bar group's centre
+  const bw = Math.max(6, colW * 0.2);
+  const innerGap = Math.max(2, colW * 0.06);
+  const groupW = 2 * bw + innerGap;
 
   return (
     <div className="overflow-x-auto">
@@ -216,29 +217,40 @@ function ComboChart({ months }) {
           </g>
         ))}
 
-        {months.map((m, i) => (
-          <g key={m.label}>
-            <rect x={x0(i)} y={y(m.budget)} width={bw} height={padT + innerH - y(m.budget)} className="fill-slate-300/70 dark:fill-slate-500/50" rx="1.5">
-              <title>{m.label} Budget: {fmt(m.budget)}</title>
-            </rect>
-            <rect x={x0(i) + bw} y={y(m.actual)} width={bw} height={padT + innerH - y(m.actual)} className="fill-emerald-300/70 dark:fill-emerald-400/40" rx="1.5">
-              <title>{m.label} Actual: {fmt(m.actual)}</title>
-            </rect>
-            <rect x={x0(i) + 2 * bw} y={y(m.forecast)} width={bw} height={padT + innerH - y(m.forecast)} className="fill-orange-300/70 dark:fill-orange-400/40" rx="1.5">
-              <title>{m.label} Forecast: {fmt(m.forecast)}</title>
-            </rect>
-            <text
-              x={cx(i)}
-              y={H - padB + 16}
-              textAnchor={months.length > 8 ? "end" : "middle"}
-              className="fill-slate-400"
-              fontSize="10"
-              transform={months.length > 8 ? `rotate(-40 ${cx(i)} ${H - padB + 16})` : undefined}
-            >
-              {m.label}
-            </text>
-          </g>
-        ))}
+        {months.map((m, i) => {
+          const c = cx(i);
+          const left = c - groupW / 2;
+          const realized = m.actual + m.forecast;
+          const isFc = m.forecast > 0;
+          return (
+            <g key={m.label}>
+              <line x1={c} x2={c} y1={padT} y2={padT + innerH} className="stroke-slate-100 dark:stroke-slate-800/50" strokeWidth="1" />
+              <rect x={left} y={y(m.budget)} width={bw} height={padT + innerH - y(m.budget)} className="fill-slate-300/70 dark:fill-slate-500/50" rx="1.5">
+                <title>{m.label} Budget: {fmt(m.budget)}</title>
+              </rect>
+              <rect
+                x={left + bw + innerGap}
+                y={y(realized)}
+                width={bw}
+                height={padT + innerH - y(realized)}
+                className={isFc ? "fill-orange-300/70 dark:fill-orange-400/40" : "fill-emerald-300/70 dark:fill-emerald-400/40"}
+                rx="1.5"
+              >
+                <title>{m.label} {isFc ? "Forecast" : "Actual"}: {fmt(realized)}</title>
+              </rect>
+              <text
+                x={c}
+                y={H - padB + 16}
+                textAnchor={months.length > 8 ? "end" : "middle"}
+                className="fill-slate-400"
+                fontSize="10"
+                transform={months.length > 8 ? `rotate(-40 ${c} ${H - padB + 16})` : undefined}
+              >
+                {m.label}
+              </text>
+            </g>
+          );
+        })}
 
         {/* cumulative S-curves — solid, distinct colors, with point markers */}
         {[
