@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import {
   Plus, Search, LayoutGrid, RefreshCw, CalendarClock, Upload,
   ZoomIn, ZoomOut, Maximize2, ChevronDown, Filter, StickyNote, X,
+  CheckSquare, Check, Ban,
 } from "lucide-react";
 import { api } from "../api";
 import { Badge, EmptyState, Spinner, Modal, Field } from "../components/ui.jsx";
@@ -35,6 +36,8 @@ export default function Dashboard({ project, drill, onClearDrill }) {
   const [importOpen, setImportOpen] = useState(false);
   const [entityStatsOpen, setEntityStatsOpen] = useState(() => lsBool("tt-stats-entity", true));
   const [taskStatsOpen, setTaskStatsOpen] = useState(() => lsBool("tt-stats-task", true));
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
   const [userZoom, setUserZoom] = useState(() => { const v = Number(localStorage.getItem("tt-zoom")); return v > 0 ? v : null; });
   const [autoFit, setAutoFit] = useState(28);
   const wrapRef = useRef(null);
@@ -90,6 +93,29 @@ export default function Dashboard({ project, drill, onClearDrill }) {
     });
   }, [data, q, filter, goliveFilter, taskFilters, drill]);
 
+  function toggleSelectMode() { setSelectMode((v) => { if (v) setSelected(new Set()); return !v; }); }
+  function toggleCell(instanceId) {
+    setSelected((cur) => { const next = new Set(cur); next.has(instanceId) ? next.delete(instanceId) : next.add(instanceId); return next; });
+  }
+  function toggleIds(ids) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      const allIn = ids.length > 0 && ids.every((id) => next.has(id));
+      ids.forEach((id) => (allIn ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  }
+  function selectRow(entityId) { const r = rows.find((x) => x.entity_id === entityId); if (r) toggleIds(r.cells.map((c) => c.instance_id)); }
+  function selectColumn(defId) { toggleIds(rows.map((r) => r.cells.find((c) => c.task_def_id === defId)?.instance_id).filter(Boolean)); }
+  function clearSel() { setSelected(new Set()); }
+  async function applyBulk(done) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    await api.bulkUpdateInstances(ids, done);
+    setSelected(new Set());
+    await load();
+  }
+
   if (loading && !data) return <Spinner />;
 
   return (
@@ -133,6 +159,7 @@ export default function Dashboard({ project, drill, onClearDrill }) {
             </div>
           )}
           <button className="btn-ghost px-2.5" onClick={load} title="Refresh"><RefreshCw size={16} /></button>
+          <button className={`btn-subtle ${selectMode ? "text-brand-600 ring-2 ring-brand-500" : ""}`} onClick={toggleSelectMode} title="Bulk select tasks"><CheckSquare size={16} /> Select</button>
           <button className="btn-subtle" onClick={() => setImportOpen(true)}><Upload size={16} /> Import</button>
           <button className="btn-primary" onClick={() => setAddOpen(true)}><Plus size={16} /> Add {project.entity_label.toLowerCase()}</button>
         </div>
@@ -153,7 +180,8 @@ export default function Dashboard({ project, drill, onClearDrill }) {
         ) : (
           <Matrix defs={defs} rows={rows} entityLabel={project.entity_label} cellPx={cellPx}
             goliveFilter={goliveFilter} setGoliveFilter={setGoliveFilter} taskFilters={taskFilters} setTaskFilter={setTaskFilter}
-            onOpen={(id, tab) => setOpen({ id, tab })} onToggleTask={askToggle} onGoliveSave={saveGolive} />
+            onOpen={(id, tab) => setOpen({ id, tab })} onToggleTask={askToggle} onGoliveSave={saveGolive}
+            selectMode={selectMode} selected={selected} onToggleCell={toggleCell} onSelectRow={selectRow} onSelectColumn={selectColumn} />
         )}
       </div>
 
@@ -167,6 +195,20 @@ export default function Dashboard({ project, drill, onClearDrill }) {
       )}
       <AddEntityModal open={addOpen} project={project} onClose={() => setAddOpen(false)} onCreated={(e) => { setAddOpen(false); load(); setOpen({ id: e.id, tab: "tasks" }); }} />
       <ImportModal open={importOpen} project={project} onClose={() => setImportOpen(false)} onDone={load} />
+      {selectMode && (
+        <div className="fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
+          <div className="card flex flex-wrap items-center gap-2 px-4 py-2.5 shadow-soft ring-1 ring-brand-500/30">
+            <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">{selected.size} selected</span>
+            <span className="hidden text-xs text-slate-400 sm:inline">Click cells, an entity name (row) or a task header (column)</span>
+            <div className="ml-1 flex items-center gap-1.5">
+              <button className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40" disabled={!selected.size} onClick={() => applyBulk(true)}><Check size={15} /> Mark completed</button>
+              <button className="btn-subtle px-3 py-1.5 text-sm disabled:opacity-40" disabled={!selected.size} onClick={() => applyBulk(false)}><Ban size={15} /> Mark not completed</button>
+              <button className="btn-ghost px-2.5 py-1.5 text-sm disabled:opacity-40" disabled={!selected.size} onClick={clearSel}>Clear</button>
+              <button className="btn-ghost px-2.5 py-1.5 text-sm" onClick={toggleSelectMode}><X size={15} /> Done</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -182,7 +224,7 @@ function StatSection({ title, open, onToggle, children }) {
   );
 }
 
-function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter, taskFilters, setTaskFilter, onOpen, onToggleTask, onGoliveSave }) {
+function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter, taskFilters, setTaskFilter, onOpen, onToggleTask, onGoliveSave, selectMode, selected, onToggleCell, onSelectRow, onSelectColumn }) {
   const square = Math.max(5, Math.min(cellPx - 14, 9));
   const goliveId = defs.find((d) => d.is_golive)?.id;
   const [popover, setPopover] = useState(null);
@@ -209,7 +251,7 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
                 const active = !!taskFilters[d.id];
                 return (
                   <th key={d.id} className={`sticky top-0 z-20 h-40 align-bottom backdrop-blur ${d.is_golive ? "bg-emerald-500/[0.28]" : "bg-slate-50/95 dark:bg-slate-900/95"}`} style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}>
-                    <button onClick={(ev) => openTaskFilter(ev, d.id)} className="relative flex h-36 w-full items-end justify-center pb-2" title={`${d.name}${d.responsible ? " — " + d.responsible : ""} (click to filter)`}>
+                    <button onClick={(ev) => (selectMode ? (ev.stopPropagation(), onSelectColumn(d.id)) : openTaskFilter(ev, d.id))} className="relative flex h-36 w-full items-end justify-center pb-2" title={selectMode ? `${d.name} (click to select column)` : `${d.name}${d.responsible ? " — " + d.responsible : ""} (click to filter)`}>
                       {active && <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-brand-600" />}
                       <span className={`font-normal ${active ? "text-brand-600" : "text-slate-600 dark:text-slate-300"}`}
                         style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", maxHeight: "8.5rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: cellPx < 20 ? "10px" : "12px" }}>{d.name}</span>
@@ -226,7 +268,7 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
                 <tr key={r.entity_id} className="group">
                   <td {...stickyBody(0, W_RACK, "px-4")}>
                     <div className="flex items-start justify-between gap-1.5">
-                      <button className="group/ent min-w-0 flex-1 text-left" onClick={() => onOpen(r.entity_id, "tasks")} title="Open">
+                      <button className="group/ent min-w-0 flex-1 text-left" onClick={() => (selectMode ? onSelectRow(r.entity_id) : onOpen(r.entity_id, "tasks"))} title={selectMode ? "Select whole row" : "Open"}>
                         <div className="truncate text-sm font-semibold group-hover/ent:text-brand-600">{r.code || "—"}</div>
                         <div className="truncate text-xs text-slate-400 group-hover/ent:text-brand-500">{r.name || r.location}</div>
                       </button>
@@ -245,10 +287,13 @@ function Matrix({ defs, rows, entityLabel, cellPx, goliveFilter, setGoliveFilter
                   {r.cells.map((c) => {
                     const m = STATUS_META[c.status] || STATUS_META.none;
                     const name = defs.find((d) => d.id === c.task_def_id)?.name || "";
-                    const tip = `${name}\n${m.label}` + (c.planned_date ? `\nDeadline: ${c.planned_date}` : "") + "\n(click to mark)";
+                    const isSel = selectMode && selected.has(c.instance_id);
+                    const tip = selectMode
+                      ? `${name}\n${m.label}\n(click to ${isSel ? "deselect" : "select"})`
+                      : `${name}\n${m.label}` + (c.planned_date ? `\nDeadline: ${c.planned_date}` : "") + "\n(click to mark)";
                     return (
-                      <td key={c.task_def_id} onClick={() => onToggleTask(c, name)}
-                        className={`cursor-pointer border-t border-slate-100 py-1.5 text-center dark:border-slate-800 ${c.task_def_id === goliveId ? "bg-emerald-500/[0.18]" : ""}`} style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}>
+                      <td key={c.task_def_id} onClick={() => (selectMode ? onToggleCell(c.instance_id) : onToggleTask(c, name))}
+                        className={`cursor-pointer border-t border-slate-100 py-1.5 text-center dark:border-slate-800 ${isSel ? "bg-brand-500/20 ring-2 ring-inset ring-brand-500" : c.task_def_id === goliveId ? "bg-emerald-500/[0.18]" : ""}`} style={{ width: cellPx, minWidth: cellPx, maxWidth: cellPx }}>
                         <div title={tip} className={`mx-auto rounded-full ring-1 ring-inset ring-black/5 transition hover:scale-150 dark:ring-white/5 ${m.cell}`} style={{ width: square, height: square }} />
                       </td>
                     );

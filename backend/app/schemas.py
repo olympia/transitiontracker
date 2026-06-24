@@ -96,6 +96,11 @@ class TaskInstanceUpdate(BaseModel):
     clear_next_step_due: bool = False
 
 
+class BulkInstanceUpdate(BaseModel):
+    ids: list[int]
+    done: bool
+
+
 class TaskInstanceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

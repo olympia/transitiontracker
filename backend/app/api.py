@@ -325,6 +325,26 @@ def delete_entity(entity_id: int, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------- task instances
+@router.put("/task-instances/bulk")
+def bulk_update_instances(
+    payload: schemas.BulkInstanceUpdate,
+    db: Session = Depends(get_db),
+):
+    if not payload.ids:
+        return {"updated": 0}
+    values = {"done": payload.done}
+    if not payload.done:
+        # un-marking fully un-completes, mirroring the single toggle's clear_actual
+        values["actual_date"] = None
+    n = (
+        db.query(models.TaskInstance)
+        .filter(models.TaskInstance.id.in_(payload.ids))
+        .update(values, synchronize_session=False)
+    )
+    db.commit()
+    return {"updated": n}
+
+
 @router.put(
     "/task-instances/{instance_id}", response_model=schemas.TaskInstanceOut
 )

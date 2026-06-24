@@ -45,6 +45,8 @@ export const api = {
 
   // task instances
   updateInstance: (id, p) => req("PUT", `/task-instances/${id}`, p),
+  bulkUpdateInstances: (ids, done) =>
+    req("PUT", "/task-instances/bulk", { ids, done }),
 
   // inventory
   addInventory: (eid, i) => req("POST", `/entities/${eid}/inventory`, i),
