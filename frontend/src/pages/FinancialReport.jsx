@@ -197,6 +197,7 @@ function smoothPath(pts) {
 }
 
 function ComboChart({ months }) {
+  const [hover, setHover] = useState(null);
   const H = 340;
   const padL = 56;
   const padR = 20;
@@ -234,6 +235,7 @@ function ComboChart({ months }) {
 
   return (
     <div className="overflow-x-auto">
+      <div className="relative" style={{ width: W }} onMouseLeave={() => setHover(null)}>
       <svg width={W} height={H} className="block">
         <defs>
           <linearGradient id="frBudgetArea" x1="0" y1="0" x2="0" y2="1">
@@ -315,11 +317,42 @@ function ComboChart({ months }) {
         {/* point markers above each bar */}
         {months.map((m, i) => (
           <g key={`d${i}`}>
-            <circle cx={budgetCx(i)} cy={y(m.cumBudgetCrs)} r="2.6" fill="#3366ff" />
-            <circle cx={realCx(i)} cy={y(m.cumRealized)} r="2.6" fill={m.isForecast ? "#f97316" : "#10b981"} />
+            <circle cx={budgetCx(i)} cy={y(m.cumBudgetCrs)} r={hover === i ? 3.6 : 2.6} fill="#3366ff" />
+            <circle cx={realCx(i)} cy={y(m.cumRealized)} r={hover === i ? 3.6 : 2.6} fill={m.isForecast ? "#f97316" : "#10b981"} />
           </g>
         ))}
+
+        {/* hover guide + capture zones (on top) */}
+        {hover != null && (
+          <line x1={cx(hover)} x2={cx(hover)} y1={padT} y2={base} className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="1" strokeDasharray="3 3" />
+        )}
+        {months.map((m, i) => (
+          <rect key={`hz${i}`} x={padL + i * colW} y={padT} width={colW} height={innerH} fill="transparent" onMouseEnter={() => setHover(i)} />
+        ))}
       </svg>
+      {hover != null && (
+        <div
+          className="pointer-events-none absolute z-10 w-44 -translate-x-1/2 rounded-lg border border-slate-200 bg-white/95 p-2 text-[11px] shadow-soft backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
+          style={{ left: Math.min(Math.max(cx(hover), 92), W - 92), top: 6 }}
+        >
+          <div className="mb-1 font-bold">{months[hover].label}</div>
+          <TipRow dot="#94a3b8" label="Budget (CR)" v={months[hover].budgetCrs} />
+          <TipRow
+            dot={months[hover].isForecast ? "#f97316" : "#10b981"}
+            label={months[hover].isForecast ? "Forecast" : "Actual"}
+            v={months[hover].realized}
+          />
+          <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+          <TipRow dot="#94a3b8" label="Cum. Budget" v={months[hover].cumBudget} />
+          <TipRow dot="#3366ff" label="Cum. Budget CR" v={months[hover].cumBudgetCrs} />
+          <TipRow
+            dot={months[hover].isForecast ? "#f97316" : "#10b981"}
+            label="Cum. Act/FC"
+            v={months[hover].cumRealized}
+          />
+        </div>
+      )}
+      </div>
       <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500">
         <Legend cls="bg-slate-300/60 dark:bg-slate-500/40" label="Monthly Budget (with CRs)" />
         <Legend cls="bg-emerald-300/60 dark:bg-emerald-400/30" label="Monthly Actual" />
@@ -345,6 +378,16 @@ function Legend({ cls, label }) {
     <span className="flex items-center gap-1.5">
       <span className={`inline-block h-3 w-3 rounded-sm ${cls}`} /> {label}
     </span>
+  );
+}
+
+function TipRow({ dot, label, v }) {
+  return (
+    <div className="flex items-center gap-1.5 py-0.5">
+      <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: dot }} />
+      <span className="flex-1 text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="tabular-nums font-semibold">{fmt(v)}</span>
+    </div>
   );
 }
 
