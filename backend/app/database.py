@@ -97,6 +97,12 @@ def _run_migrations() -> None:
         "ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS partner_item_id INT NULL",
         "ALTER TABLE budget_months ADD COLUMN IF NOT EXISTS po_committed TINYINT(1) NOT NULL DEFAULT 0",
         "ALTER TABLE budget_months ADD COLUMN IF NOT EXISTS po_number VARCHAR(60) NOT NULL DEFAULT ''",
+        # widen monetary columns from single-precision FLOAT (~7 significant
+        # digits) to DOUBLE so 8-9 digit amounts are not rounded on save
+        "ALTER TABLE budget_months MODIFY COLUMN budget_value DOUBLE NOT NULL DEFAULT 0",
+        "ALTER TABLE budget_months MODIFY COLUMN realized_value DOUBLE NOT NULL DEFAULT 0",
+        "ALTER TABLE financial_years MODIFY COLUMN rate_1 DOUBLE NOT NULL DEFAULT 0",
+        "ALTER TABLE financial_years MODIFY COLUMN rate_2 DOUBLE NOT NULL DEFAULT 0",
         # drop the obsolete item-level amount/manday columns from the first
         # (scrapped) design; they were created NOT NULL and now block inserts
         "ALTER TABLE budget_items DROP COLUMN IF EXISTS responsible",

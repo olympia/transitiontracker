@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Double,
     Float,
     ForeignKey,
     Integer,
@@ -174,8 +175,8 @@ class FinancialYear(Base):
     )
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     # base-currency units per 1 unit of reporting currency (e.g. 405 HUF / EUR)
-    rate_1: Mapped[float] = mapped_column(Float, default=0.0)
-    rate_2: Mapped[float] = mapped_column(Float, default=0.0)
+    rate_1: Mapped[float] = mapped_column(Double, default=0.0)
+    rate_2: Mapped[float] = mapped_column(Double, default=0.0)
     # months >= this are Forecast, months below are Actual (1..13). 1 = all FC.
     forecast_from_month: Mapped[int] = mapped_column(Integer, default=1)
 
@@ -247,7 +248,7 @@ class BudgetItem(Base):
     name: Mapped[str] = mapped_column(String(400), default="")
     item_type: Mapped[str] = mapped_column(String(20), default="fixed")  # fixed | manday
     # daily rate (base currency) for manday-type items
-    daily_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    daily_rate: Mapped[float] = mapped_column(Double, default=0.0)
     # marks a hardware (HW) line, used to scope future reports
     is_hw: Mapped[bool] = mapped_column(Boolean, default=False)
     # change-request rows live in the same table, flagged and kinded
@@ -283,8 +284,8 @@ class BudgetMonth(Base):
         ForeignKey("budget_items.id", ondelete="CASCADE"), index=True
     )
     month: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..12
-    budget_value: Mapped[float] = mapped_column(Float, default=0.0)
-    realized_value: Mapped[float] = mapped_column(Float, default=0.0)
+    budget_value: Mapped[float] = mapped_column(Double, default=0.0)
+    realized_value: Mapped[float] = mapped_column(Double, default=0.0)
     # for forecast months: whether the PO is out / committed (obligó) in SAP
     po_committed: Mapped[bool] = mapped_column(Boolean, default=False)
     po_number: Mapped[str] = mapped_column(String(60), default="")
