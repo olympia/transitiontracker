@@ -364,12 +364,14 @@ function ComboChart({ months }) {
   const areaUnder = (pts) =>
     pts.length ? `${smoothPath(pts)} L${pts[pts.length - 1][0]},${base} L${pts[0][0]},${base} Z` : "";
 
-  // where green (actual) turns to orange (forecast) along the realized line
+  // where green (actual) turns to orange (forecast) along the realized line.
+  // Switch at the LAST ACTUAL month (ffi-1) so the actual->forecast segment is
+  // fully orange, not just the final forecast point.
   const ffi = months.findIndex((m) => m.isForecast);
   const rx0 = realCx(0);
   const rxN = realCx(months.length - 1);
   const cutFrac =
-    ffi < 0 ? 1 : ffi === 0 ? 0 : Math.max(0, Math.min(1, (realCx(ffi) - rx0) / Math.max(1, rxN - rx0)));
+    ffi < 0 ? 1 : ffi === 0 ? 0 : Math.max(0, Math.min(1, (realCx(ffi - 1) - rx0) / Math.max(1, rxN - rx0)));
 
   return (
     <div className="overflow-x-auto">
