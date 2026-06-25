@@ -1280,6 +1280,7 @@ function ItemModal({ ctx, codes, legs = [], onClose, onSaved }) {
   const isCr = ctx.isCr || it?.is_cr || false;
   const [name, setName] = useState(it?.name || "");
   const [isManday, setIsManday] = useState(it?.item_type === "manday");
+  const [isHw, setIsHw] = useState(it?.is_hw || false);
   const [rate, setRate] = useState(it?.daily_rate ?? 0);
   const [crKind, setCrKind] = useState(it?.cr_kind || "cr");
   const otherLegs = legs.filter((l) => l.id !== ctx.legId);
@@ -1304,6 +1305,7 @@ function ItemModal({ ctx, codes, legs = [], onClose, onSaved }) {
         name: showTitle ? name.trim() : "",
         item_type: useManday ? "manday" : "fixed",
         daily_rate: useManday ? num(rate) : 0,
+        is_hw: !isCr && isHw,
         is_cr: isCr,
         cr_kind: isCr ? crKind : "",
       };
@@ -1387,6 +1389,15 @@ function ItemModal({ ctx, codes, legs = [], onClose, onSaved }) {
                 </div>
               </div>
               <Toggle checked={isManday} onChange={setIsManday} />
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
+              <div>
+                <div className="text-sm font-semibold">Hardware (HW)</div>
+                <div className="text-xs text-slate-500">
+                  Mark this line as hardware (used to scope reports).
+                </div>
+              </div>
+              <Toggle checked={isHw} onChange={setIsHw} />
             </div>
             {isManday && (
               <Field label={`Daily rate (${codes.base})`}>
