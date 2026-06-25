@@ -585,6 +585,14 @@ function YearGrid({
               onScroll={onBlockScroll}
             />
           ))}
+          <GrandTotalCard
+            legs={data.legs}
+            cutoff={cutoff}
+            conv={conv}
+            itemColW={itemColW}
+            scrollRef={registerScroller}
+            onScroll={onBlockScroll}
+          />
           <button className="btn-subtle" onClick={onAddLeg}>
             <Plus size={16} /> Add WBS leg
           </button>
@@ -833,6 +841,104 @@ function LegCard({
             ))}
             {crs.length > 0 && (
               <TotalRow label="TOTAL with CRs" agg={withCrsAgg} monthTotals={withCrsMonths} conv={conv} />
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// per-month base-currency totals (budget + realized) for a list of items
+function monthTotals(list) {
+  return MONTHS.map((_, idx) => {
+    const month = idx + 1;
+    let b = 0;
+    let r = 0;
+    for (const it of list) {
+      const mm = it.months.find((x) => x.month === month);
+      if (mm) {
+        b += monthAmount(it, mm, "budget");
+        r += monthAmount(it, mm, "realized");
+      }
+    }
+    return { b, r };
+  });
+}
+
+// grand-total block summing every WBS leg in the year, yearly + monthly.
+// Mirrors a LegCard's table so the columns line up and it scrolls in sync.
+function GrandTotalCard({ legs, cutoff, conv, itemColW, scrollRef, onScroll }) {
+  const allRegular = legs.flatMap((leg) => leg.items.filter((it) => !it.is_cr));
+  const allItems = legs.flatMap((leg) => leg.items);
+  const hasCrs = allItems.length > allRegular.length;
+
+  const regAgg = sumAgg(allRegular.map((it) => aggItem(it, cutoff)));
+  const withCrsAgg = sumAgg(allItems.map((it) => aggItem(it, cutoff)));
+  const regMonths = monthTotals(allRegular);
+  const withCrsMonths = monthTotals(allItems);
+
+  return (
+    <div className="card overflow-hidden ring-1 ring-brand-500/30">
+      <div className="flex items-center gap-2 bg-brand-700 px-4 py-3 dark:bg-brand-800">
+        <Layers size={16} className="text-white/80" />
+        <span className="text-[13px] font-extrabold uppercase tracking-wide text-white">
+          All WBS legs · Grand total
+        </span>
+      </div>
+
+      <div className="overflow-x-auto" ref={scrollRef} onScroll={onScroll}>
+        <table className="text-sm" style={{ "--item-w": `${itemColW}px` }}>
+          <thead>
+            <tr className="bg-slate-200 text-[11px] font-bold uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+              <th
+                rowSpan={2}
+                style={{ width: "var(--item-w)", minWidth: "var(--item-w)", maxWidth: "var(--item-w)" }}
+                className="sticky left-0 z-10 bg-slate-200 px-4 py-2 text-left dark:bg-slate-700"
+              >
+                Item
+              </th>
+              <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Budget</th>
+              <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Actual</th>
+              <th rowSpan={2} className={`px-3 py-2 text-right ${AGG_W}`}>Forecast</th>
+              <th rowSpan={2} className={`border-r border-slate-300 px-3 py-2 text-right dark:border-slate-600 ${AGG_W}`}>Total</th>
+              {MONTHS.map((mn, idx) => (
+                <th key={mn} colSpan={2} className={`px-2 py-1 text-center ${idx > 0 ? MONTH_SEP : ""}`}>
+                  <span className="inline-block rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                    {mn}
+                  </span>
+                </th>
+              ))}
+              <th rowSpan={2}></th>
+            </tr>
+            <tr className="bg-slate-200 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+              {MONTHS.map((mn, idx) => {
+                const fc = idx + 1 >= cutoff;
+                return (
+                  <React.Fragment key={mn}>
+                    <th className={`${COL_W} px-1 py-1 text-center font-medium ${idx > 0 ? MONTH_SEP : ""}`}>Budget</th>
+                    <th className={`${COL_W} px-1 py-1 text-center font-medium ${fc ? "text-orange-700" : "text-emerald-600"}`}>
+                      {fc ? "Forecast" : "Actual"}
+                    </th>
+                  </React.Fragment>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {legs.length === 0 ? (
+              <tr>
+                <td colSpan={5 + 24 + 1} className="px-4 py-4 text-center text-sm text-slate-400">
+                  No WBS legs yet.
+                </td>
+              </tr>
+            ) : (
+              <>
+                <TotalRow label="TOTAL (all WBS)" agg={regAgg} monthTotals={regMonths} conv={conv} />
+                {hasCrs && (
+                  <TotalRow label="TOTAL with CRs (all WBS)" agg={withCrsAgg} monthTotals={withCrsMonths} conv={conv} />
+                )}
+              </>
             )}
           </tbody>
         </table>
