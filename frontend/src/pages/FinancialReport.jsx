@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BarChart3, PieChart, TrendingUp } from "lucide-react";
+import { BarChart3, PieChart, TrendingUp, Table2, Coins, ChevronRight } from "lucide-react";
 import { api } from "../api";
 import { Spinner, EmptyState } from "../components/ui.jsx";
 
@@ -33,7 +33,27 @@ export default function FinancialReport({ project }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
-  const base = data?.[0]?.project.base_currency || project.base_currency || "";
+  const codes = useMemo(
+    () => ({
+      base: data?.[0]?.project.base_currency || project.base_currency || "",
+      rep1: data?.[0]?.project.reporting_currency_1 || project.reporting_currency_1 || "",
+      rep2: data?.[0]?.project.reporting_currency_2 || project.reporting_currency_2 || "",
+    }),
+    [data, project]
+  );
+  const currencyOptions = useMemo(
+    () => [codes.base, codes.rep1, codes.rep2].filter(Boolean),
+    [codes]
+  );
+  const [displayCur, setDisplayCur] = useState(
+    () => localStorage.getItem("tt-fin-cur") || ""
+  );
+  const cur = currencyOptions.includes(displayCur) ? displayCur : codes.base;
+  useEffect(() => {
+    if (cur) localStorage.setItem("tt-fin-cur", cur);
+  }, [cur]);
+  // display label for charts/tables
+  const base = cur;
 
   const [sel, setSel] = useState("overall");
   const years = useMemo(
@@ -46,12 +66,30 @@ export default function FinancialReport({ project }) {
     return curSel === "overall" ? data : data.filter((yd) => yd.year.year === curSel);
   }, [data, curSel]);
 
+  // per-year multiplier to convert a base amount into the selected currency
+  // (0 = unconvertible: a reporting currency with no rate for that year)
+  const yearMult = useMemo(() => {
+    return (yd) => {
+      if (cur === codes.base) return 1;
+      const r =
+        cur === codes.rep1
+          ? Number(yd.year.rate_1) || 0
+          : cur === codes.rep2
+          ? Number(yd.year.rate_2) || 0
+          : 0;
+      return r > 0 ? 1 / r : 0;
+    };
+  }, [cur, codes]);
+
   const model = useMemo(() => {
     if (!scoped || scoped.length === 0) return null;
+    const missing = new Set();
     // monthly timeline (chronological); for a single year just its 12 months
     let months = [];
     for (const yd of scoped) {
       const cutoff = yd.year.forecast_from_month ?? 1;
+      const m = yearMult(yd);
+      if (cur !== codes.base && m === 0) missing.add(yd.year.year);
       for (let mo = 1; mo <= 12; mo++) {
         let budget = 0; // original budget (regular items, no CRs)
         let budgetCrs = 0; // budget incl. CR rows
@@ -60,11 +98,11 @@ export default function FinancialReport({ project }) {
           for (const it of leg.items) {
             const mm = it.months.find((x) => x.month === mo);
             if (!mm) continue;
-            const bv = monthAmount(it, mm, "budget");
+            const bv = monthAmount(it, mm, "budget") * m;
             budgetCrs += bv;
             if (!it.is_cr) {
               budget += bv;
-              realized += monthAmount(it, mm, "realized");
+              realized += monthAmount(it, mm, "realized") * m;
             }
           }
         months.push({
@@ -103,22 +141,23 @@ export default function FinancialReport({ project }) {
     let crBudget = 0;
     for (const yd of scoped) {
       const cutoff = yd.year.forecast_from_month ?? 1;
+      const m = yearMult(yd);
       for (const leg of yd.legs)
         for (const it of leg.items)
           for (const mm of it.months) {
-            const bv = monthAmount(it, mm, "budget");
+            const bv = monthAmount(it, mm, "budget") * m;
             if (it.is_cr) crBudget += bv;
             else regBudget += bv;
             if (it.is_cr) continue;
-            const rv = monthAmount(it, mm, "realized");
+            const rv = monthAmount(it, mm, "realized") * m;
             if (mm.month < cutoff) actualTot += rv;
             else if (mm.po_committed) obligo += rv;
             else open += rv;
           }
     }
     const budgetWithCrs = regBudget + crBudget;
-    return { months, actualTot, obligo, open, budgetWithCrs };
-  }, [scoped]);
+    return { months, actualTot, obligo, open, budgetWithCrs, missingYears: [...missing] };
+  }, [scoped, cur, codes, yearMult]);
 
   if (loading && !data) return <Spinner />;
   if (!data || data.length === 0)
@@ -138,15 +177,34 @@ export default function FinancialReport({ project }) {
     }`;
 
   const yearPicker = (
-    <div className="flex flex-wrap items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/70">
-      <button onClick={() => setSel("overall")} className={pillCls(curSel === "overall")}>
-        Overall
-      </button>
-      {years.map((yr) => (
-        <button key={yr} onClick={() => setSel(yr)} className={pillCls(curSel === yr)}>
-          {yr}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/70">
+        <button onClick={() => setSel("overall")} className={pillCls(curSel === "overall")}>
+          Overall
         </button>
-      ))}
+        {years.map((yr) => (
+          <button key={yr} onClick={() => setSel(yr)} className={pillCls(curSel === yr)}>
+            {yr}
+          </button>
+        ))}
+      </div>
+      {currencyOptions.length > 1 && (
+        <label className="flex items-center gap-1.5 text-sm">
+          <Coins size={16} className="text-slate-400" />
+          <select
+            className="input h-9 py-0"
+            value={cur}
+            onChange={(e) => setDisplayCur(e.target.value)}
+          >
+            {currencyOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+                {c === codes.base ? " (base)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
     </div>
   );
 
@@ -162,11 +220,30 @@ export default function FinancialReport({ project }) {
       </div>
     );
 
-  const { months, actualTot, obligo, open, budgetWithCrs } = model;
+  const { months, actualTot, obligo, open, budgetWithCrs, missingYears } = model;
 
   return (
     <div className="space-y-6">
       {yearPicker}
+      {missingYears.length > 0 && (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+          No {cur} rate set for {missingYears.join(", ")}. Those year(s) are counted as 0;
+          set the rate in Budget Details &rarr; Setup.
+        </div>
+      )}
+
+      <section>
+        <div className="mb-1 flex items-center gap-2">
+          <Table2 size={18} className="text-brand-600" />
+          <h2 className="text-lg font-extrabold">Budget Summary</h2>
+        </div>
+        <p className="mb-4 text-sm text-slate-500">
+          Budget elements by category{curSel === "overall" ? " (all years)" : ` (${curSel})`},
+          in {cur}. Click a category to expand its elements.
+        </p>
+        <SummaryTable scoped={scoped} codes={codes} cur={cur} yearMult={yearMult} />
+      </section>
+
       <section>
         <div className="mb-1 flex items-center gap-2">
           <TrendingUp size={18} className="text-brand-600" />
@@ -515,6 +592,221 @@ function UtilBars({ actual, obligo, open, budget }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------- summary table
+// Categories whose legs are split into HW / Implementation rows by the is_hw
+// flag (matched case-insensitively on the leg category label).
+const SPLIT_CATEGORIES = ["external capex", "external capex breakdown"];
+const HW_ROW = "External CAPEX HW";
+const IMPL_ROW = "External CAPEX Implementation (aka consultancy)";
+const CR_KIND_LABEL = {
+  carry_over: "Carry Over",
+  reallocation: "Budget Reallocation",
+  cancelation: "Budget Cancellation",
+  cr: "CR",
+};
+
+const SUMMARY_COLS = [
+  { key: "budget", label: "Budget" },
+  { key: "realloc", label: "Reallocation" },
+  { key: "cancel", label: "Cancellation" },
+  { key: "modified", label: "Modified Budget", strong: true },
+  { key: "actual", label: "Actual" },
+  { key: "forecast", label: "Forecast" },
+  { key: "actfc", label: "Actual + Forecast" },
+  { key: "saving", label: "Saving" },
+  { key: "carry", label: "Carry Over" },
+];
+
+function emptyAgg() {
+  return { budget: 0, realloc: 0, cancel: 0, gencr: 0, carry: 0, actual: 0, forecast: 0 };
+}
+function addAgg(t, a) {
+  for (const k in a) t[k] += a[k];
+}
+// add the derived columns (modified / actfc / saving) for rendering
+function deriveCols(a) {
+  const modified = a.budget + a.realloc + a.cancel + a.gencr;
+  const actfc = a.actual + a.forecast;
+  return { ...a, modified, actfc, saving: modified - actfc };
+}
+// one budget item's base-converted contribution, routed to the right column
+function itemAgg(it, cutoff, m) {
+  const a = emptyAgg();
+  let b = 0;
+  let act = 0;
+  let fc = 0;
+  for (const mm of it.months) {
+    b += monthAmount(it, mm, "budget") * m;
+    if (!it.is_cr) {
+      const rv = monthAmount(it, mm, "realized") * m;
+      if (mm.month < cutoff) act += rv;
+      else fc += rv;
+    }
+  }
+  if (!it.is_cr) {
+    a.budget = b;
+    a.actual = act;
+    a.forecast = fc;
+  } else if (it.cr_kind === "reallocation") a.realloc = b;
+  else if (it.cr_kind === "cancelation") a.cancel = b;
+  else if (it.cr_kind === "carry_over") a.carry = b;
+  else a.gencr = b;
+  return a;
+}
+
+function SummaryTable({ scoped, codes, cur, yearMult }) {
+  const [open, setOpen] = useState(() => new Set());
+
+  const { rows, total } = useMemo(() => {
+    const map = new Map(); // label -> { agg, details: Map(label -> agg) }
+    const order = [];
+    const total = emptyAgg();
+    const group = (label) => {
+      if (!map.has(label)) {
+        map.set(label, { agg: emptyAgg(), details: new Map() });
+        order.push(label);
+      }
+      return map.get(label);
+    };
+    for (const yd of scoped) {
+      const cutoff = yd.year.forecast_from_month ?? 1;
+      const m = yearMult(yd);
+      for (const leg of yd.legs) {
+        const catRaw = leg.category && leg.category.trim() ? leg.category : "Uncategorized";
+        const isSplit = SPLIT_CATEGORIES.includes(catRaw.trim().toLowerCase());
+        for (const it of leg.items) {
+          const a = itemAgg(it, cutoff, m);
+          const label = isSplit ? (it.is_hw ? HW_ROW : IMPL_ROW) : catRaw;
+          const g = group(label);
+          addAgg(g.agg, a);
+          addAgg(total, a);
+          const dl = it.is_cr
+            ? `${CR_KIND_LABEL[it.cr_kind] || "CR"}${it.name ? ` · ${it.name}` : ""}`
+            : it.name || "—";
+          const prev = g.details.get(dl) || emptyAgg();
+          addAgg(prev, a);
+          g.details.set(dl, prev);
+        }
+      }
+    }
+    const rows = order.map((label) => {
+      const g = map.get(label);
+      return {
+        label,
+        agg: deriveCols(g.agg),
+        details: [...g.details.entries()].map(([dl, a]) => ({ label: dl, agg: deriveCols(a) })),
+      };
+    });
+    return { rows, total: deriveCols(total) };
+  }, [scoped, cur, codes, yearMult]);
+
+  if (rows.length === 0)
+    return (
+      <div className="card px-4 py-6 text-center text-sm text-slate-400">
+        No budget elements to summarize.
+      </div>
+    );
+
+  const toggle = (label) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      n.has(label) ? n.delete(label) : n.add(label);
+      return n;
+    });
+
+  const numCls = "px-3 py-1.5 text-right tabular-nums whitespace-nowrap w-[118px] min-w-[118px]";
+  const cz = (v) => (Math.round(v) === 0 ? "" : fmt(v));
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="text-sm">
+          <thead>
+            <tr className="bg-slate-200 text-[11px] font-bold uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+              <th className="sticky left-0 z-10 bg-slate-200 px-4 py-2 text-left dark:bg-slate-700 w-[280px] min-w-[280px]">
+                Budget Elements
+              </th>
+              {SUMMARY_COLS.map((c) => (
+                <th
+                  key={c.key}
+                  className={`px-3 py-2 text-right ${c.strong ? "text-brand-700 dark:text-brand-300" : ""}`}
+                >
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {rows.map((r) => {
+              const hasDetails = r.details.length > 0;
+              const isOpen = open.has(r.label);
+              return (
+                <React.Fragment key={r.label}>
+                  <tr className="bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/50">
+                    <td className="sticky left-0 z-10 bg-inherit px-4 py-1.5 w-[280px] min-w-[280px]">
+                      <button
+                        type="button"
+                        onClick={() => hasDetails && toggle(r.label)}
+                        className={`flex items-center gap-1.5 text-left font-semibold ${
+                          hasDetails ? "" : "cursor-default"
+                        }`}
+                      >
+                        {hasDetails ? (
+                          <ChevronRight
+                            size={14}
+                            className={`shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                          />
+                        ) : (
+                          <span className="inline-block w-[14px] shrink-0" />
+                        )}
+                        <span>{r.label}</span>
+                      </button>
+                    </td>
+                    {SUMMARY_COLS.map((c) => (
+                      <td
+                        key={c.key}
+                        className={`${numCls} ${c.strong ? "font-semibold text-brand-700 dark:text-brand-300" : "font-medium"}`}
+                      >
+                        {cz(r.agg[c.key])}
+                      </td>
+                    ))}
+                  </tr>
+                  {isOpen &&
+                    r.details.map((d, i) => (
+                      <tr key={`${r.label}-${i}`} className="bg-slate-50/60 dark:bg-slate-800/20">
+                        <td className="sticky left-0 z-10 bg-inherit py-1 pl-9 pr-4 text-[13px] font-light text-slate-500 dark:text-slate-400 w-[280px] min-w-[280px]">
+                          {d.label}
+                        </td>
+                        {SUMMARY_COLS.map((c) => (
+                          <td key={c.key} className={`${numCls} font-light text-slate-500 dark:text-slate-400`}>
+                            {cz(d.agg[c.key])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                </React.Fragment>
+              );
+            })}
+            <tr className="border-t-2 border-slate-300 bg-slate-100 font-bold dark:border-slate-600 dark:bg-slate-800/60">
+              <td className="sticky left-0 z-10 bg-slate-100 px-4 py-2 dark:bg-slate-800/60 w-[280px] min-w-[280px]">
+                TOTAL
+              </td>
+              {SUMMARY_COLS.map((c) => (
+                <td
+                  key={c.key}
+                  className={`${numCls} ${c.strong ? "text-brand-700 dark:text-brand-300" : ""}`}
+                >
+                  {cz(total[c.key])}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
