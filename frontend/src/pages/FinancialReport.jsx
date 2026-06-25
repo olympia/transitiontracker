@@ -358,8 +358,15 @@ function ComboChart({ months }) {
   const budgetCx = (i) => cx(i) - groupW / 2 + bw / 2;
   const realCx = (i) => cx(i) - groupW / 2 + bw + innerGap + bw / 2;
 
-  const bcrsPts = months.map((m, i) => [budgetCx(i), y(m.cumBudgetCrs)]);
-  const bPts = months.map((m, i) => [budgetCx(i), y(m.cumBudget)]);
+  // at the FINAL forecast month, end the cumulative budget lines over the
+  // realized (actual) bar centre instead of the budget bar centre, so they meet
+  // the realized line; intermediate months keep the budget bar centre
+  const lastI = months.length - 1;
+  const lastIsForecast = lastI >= 0 && months[lastI].isForecast;
+  const budgetLineX = (i) => (i === lastI && lastIsForecast ? realCx(i) : budgetCx(i));
+
+  const bcrsPts = months.map((m, i) => [budgetLineX(i), y(m.cumBudgetCrs)]);
+  const bPts = months.map((m, i) => [budgetLineX(i), y(m.cumBudget)]);
   const rPts = months.map((m, i) => [realCx(i), y(m.cumRealized)]);
   const areaUnder = (pts) =>
     pts.length ? `${smoothPath(pts)} L${pts[pts.length - 1][0]},${base} L${pts[0][0]},${base} Z` : "";
@@ -461,7 +468,7 @@ function ComboChart({ months }) {
         {/* point markers above each bar */}
         {months.map((m, i) => (
           <g key={`d${i}`}>
-            <circle cx={budgetCx(i)} cy={y(m.cumBudgetCrs)} r={hover === i ? 3.6 : 2.6} fill="#1f47f5" />
+            <circle cx={budgetLineX(i)} cy={y(m.cumBudgetCrs)} r={hover === i ? 3.6 : 2.6} fill="#1f47f5" />
             <circle cx={realCx(i)} cy={y(m.cumRealized)} r={hover === i ? 3.6 : 2.6} fill={m.isForecast ? "#f97316" : "#10b981"} />
           </g>
         ))}
