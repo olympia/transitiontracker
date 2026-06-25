@@ -413,6 +413,7 @@ export default function Finance({ project, onProjectChange }) {
         <LegModal
           ctx={legEdit}
           categories={categories}
+          years={years || []}
           onClose={() => setLegEdit(null)}
           onOpenSetup={() => {
             setLegEdit(null);
@@ -430,6 +431,8 @@ export default function Finance({ project, onProjectChange }) {
           ctx={itemEdit}
           codes={codes}
           legs={data?.legs || []}
+          years={years || []}
+          currentYearId={data?.year.id}
           onClose={() => setItemEdit(null)}
           onSaved={() => {
             setItemEdit(null);
@@ -1200,21 +1203,36 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
 }
 
 // ----------------------------------------------------------------- leg modal
-function LegModal({ ctx, categories, onClose, onOpenSetup, onSaved }) {
+function LegModal({ ctx, categories, years = [], onClose, onOpenSetup, onSaved }) {
   const editing = !!ctx.leg;
   const [code, setCode] = useState(ctx.leg?.code || "");
   const [name, setName] = useState(ctx.leg?.name || "");
   const [category, setCategory] = useState(
     ctx.leg?.category || categories[0]?.name || ""
   );
+  const [allYears, setAllYears] = useState(false);
   const [busy, setBusy] = useState(false);
+  const multiYear = !editing && years.length > 1;
 
   async function save() {
     setBusy(true);
     try {
       const payload = { code: code.trim(), name: name.trim(), category };
-      if (editing) await api.updateLeg(ctx.leg.id, payload);
-      else await api.createLeg(ctx.yearId, payload);
+      if (editing) {
+        await api.updateLeg(ctx.leg.id, payload);
+      } else if (allYears && multiYear) {
+        // create the same leg in every year, skipping years that already have
+        // a leg with this WBS code
+        for (const y of years) {
+          if (payload.code) {
+            const existing = await api.listLegs(y.id);
+            if (existing.some((l) => (l.code || "").trim() === payload.code)) continue;
+          }
+          await api.createLeg(y.id, payload);
+        }
+      } else {
+        await api.createLeg(ctx.yearId, payload);
+      }
       onSaved();
     } finally {
       setBusy(false);
@@ -1268,13 +1286,24 @@ function LegModal({ ctx, categories, onClose, onOpenSetup, onSaved }) {
             </select>
           )}
         </Field>
+        {multiYear && (
+          <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
+            <div>
+              <div className="text-sm font-semibold">Create in every year</div>
+              <div className="text-xs text-slate-500">
+                Adds this WBS leg to all {years.length} budget years (skips years that already have this code).
+              </div>
+            </div>
+            <Toggle checked={allYears} onChange={setAllYears} />
+          </div>
+        )}
       </div>
     </Modal>
   );
 }
 
 // ----------------------------------------------------------------- item modal
-function ItemModal({ ctx, codes, legs = [], onClose, onSaved }) {
+function ItemModal({ ctx, codes, legs = [], years = [], currentYearId, onClose, onSaved }) {
   const it = ctx.item;
   const editing = !!it;
   const isCr = ctx.isCr || it?.is_cr || false;
@@ -1285,6 +1314,7 @@ function ItemModal({ ctx, codes, legs = [], onClose, onSaved }) {
   const [crKind, setCrKind] = useState(it?.cr_kind || "cr");
   const otherLegs = legs.filter((l) => l.id !== ctx.legId);
   const [partnerId, setPartnerId] = useState(() => otherLegs[0]?.id ?? "");
+  const [allYears, setAllYears] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // CRs are always fixed amounts; every CR kind carries a title except Carry Over
@@ -1293,6 +1323,8 @@ function ItemModal({ ctx, codes, legs = [], onClose, onSaved }) {
   // a reallocation is created as a linked pair across two WBS legs
   const isRealloc = isCr && crKind === "reallocation";
   const pairing = isRealloc && !editing;
+  // regular items can be cloned into every year that has the same WBS leg
+  const multiYear = !isCr && !editing && years.length > 1;
 
   async function save() {
     if (pairing && !partnerId) {
@@ -1317,6 +1349,26 @@ function ItemModal({ ctx, codes, legs = [], onClose, onSaved }) {
         const partner = await api.createItem(Number(partnerId), payload);
         await api.updateItem(src.id, { partner_item_id: partner.id });
         await api.updateItem(partner.id, { partner_item_id: src.id });
+      } else if (allYears && multiYear) {
+        // create the item in every year whose matching WBS leg (by code, or by
+        // name when the code is empty) exists; skip years without that leg
+        const curLeg = legs.find((l) => l.id === ctx.legId);
+        const legCode = (curLeg?.code || "").trim();
+        const legName = (curLeg?.name || "").trim();
+        for (const y of years) {
+          let legId = null;
+          if (y.id === currentYearId) {
+            legId = ctx.legId;
+          } else {
+            const yLegs = await api.listLegs(y.id);
+            const match = yLegs.find((l) =>
+              legCode ? (l.code || "").trim() === legCode : (l.name || "").trim() === legName
+            );
+            if (!match) continue;
+            legId = match.id;
+          }
+          await api.createItem(legId, payload);
+        }
       } else {
         await api.createItem(ctx.legId, payload);
       }
@@ -1411,6 +1463,17 @@ function ItemModal({ ctx, codes, legs = [], onClose, onSaved }) {
               </Field>
             )}
           </>
+        )}
+        {multiYear && (
+          <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
+            <div>
+              <div className="text-sm font-semibold">Add to every year</div>
+              <div className="text-xs text-slate-500">
+                Creates this item in each year that has the same WBS leg (matched by code); years without it are skipped.
+              </div>
+            </div>
+            <Toggle checked={allYears} onChange={setAllYears} />
+          </div>
         )}
         <p className="text-xs text-slate-500">
           After saving, enter the monthly {isCr ? "amounts" : "Budget and Actual/Forecast values"} directly in the row.
