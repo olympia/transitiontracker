@@ -16,6 +16,21 @@ function monthAmount(it, m, field) {
   return it.item_type === "manday" ? v * (Number(it.daily_rate) || 0) : v;
 }
 
+// track the app's class-based dark mode so SVG charts can switch between the
+// rich on-screen look (dark) and a crisp, PPT-ready look (light)
+function useIsDark() {
+  const [dark, setDark] = useState(
+    () => typeof document !== "undefined" && document.documentElement.classList.contains("dark")
+  );
+  useEffect(() => {
+    const el = document.documentElement;
+    const obs = new MutationObserver(() => setDark(el.classList.contains("dark")));
+    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+  return dark;
+}
+
 export default function FinancialReport({ project }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -319,12 +334,14 @@ function smoothPath(pts) {
 
 function ComboChart({ months }) {
   const [hover, setHover] = useState(null);
-  const H = 340;
-  const padL = 56;
-  const padR = 20;
-  const padT = 16;
-  const padB = 64;
-  const colW = Math.max(46, Math.min(78, 760 / Math.max(months.length, 1)));
+  const isDark = useIsDark();
+  const H = 360;
+  const padL = 60;
+  const padR = 24;
+  const padT = 18;
+  const padB = 78; // room for vertical date labels
+  // wider columns so the months breathe (card scrolls horizontally)
+  const colW = Math.max(64, Math.min(120, 1280 / Math.max(months.length, 1)));
   const W = padL + padR + months.length * colW;
   const innerH = H - padT - padB;
 
@@ -386,22 +403,26 @@ function ComboChart({ months }) {
 
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} className="stroke-slate-100 dark:stroke-slate-800/70" strokeWidth="1" />
-            <text x={padL - 8} y={y(t) + 4} textAnchor="end" className="fill-slate-400" fontSize="10">
+            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} className="stroke-slate-200 dark:stroke-slate-800/70" strokeWidth="1" />
+            <text x={padL - 8} y={y(t) + 4} textAnchor="end" className="fill-slate-500 dark:fill-slate-400" fontSize="10">
               {fmtShort(t)}
             </text>
           </g>
         ))}
 
-        {/* soft area fills */}
-        <path d={areaUnder(rPts)} fill="url(#frRealArea)" />
-        <path d={areaUnder(bcrsPts)} fill="url(#frBudgetArea)" />
+        {/* soft area fills — on-screen (dark) only; light stays clean for PPT */}
+        {isDark && (
+          <>
+            <path d={areaUnder(rPts)} fill="url(#frRealArea)" />
+            <path d={areaUnder(bcrsPts)} fill="url(#frBudgetArea)" />
+          </>
+        )}
 
         {months.map((m, i) => {
           const left = cx(i) - groupW / 2;
           return (
             <g key={m.label}>
-              <rect x={left} y={y(m.budgetCrs)} width={bw} height={base - y(m.budgetCrs)} className="fill-slate-300/60 dark:fill-slate-500/40" rx="2.5">
+              <rect x={left} y={y(m.budgetCrs)} width={bw} height={base - y(m.budgetCrs)} className="fill-slate-400 dark:fill-slate-500/40" rx="1.5">
                 <title>{m.label} Budget (with CRs): {fmt(m.budgetCrs)}</title>
               </rect>
               <rect
@@ -409,18 +430,18 @@ function ComboChart({ months }) {
                 y={y(m.realized)}
                 width={bw}
                 height={base - y(m.realized)}
-                className={m.isForecast ? "fill-orange-300/60 dark:fill-orange-400/30" : "fill-emerald-300/60 dark:fill-emerald-400/30"}
-                rx="2.5"
+                className={m.isForecast ? "fill-orange-500 dark:fill-orange-400/30" : "fill-emerald-600 dark:fill-emerald-400/30"}
+                rx="1.5"
               >
                 <title>{m.label} {m.isForecast ? "Forecast" : "Actual"}: {fmt(m.realized)}</title>
               </rect>
               <text
                 x={cx(i)}
-                y={H - padB + 16}
-                textAnchor={months.length > 8 ? "end" : "middle"}
-                className="fill-slate-400"
-                fontSize="10"
-                transform={months.length > 8 ? `rotate(-40 ${cx(i)} ${H - padB + 16})` : undefined}
+                y={H - padB + 8}
+                textAnchor="end"
+                className="fill-slate-600 dark:fill-slate-300"
+                fontSize="11"
+                transform={`rotate(-90 ${cx(i)} ${H - padB + 8})`}
               >
                 {m.label}
               </text>
@@ -429,16 +450,16 @@ function ComboChart({ months }) {
         })}
 
         {/* cumulative original budget — thin, secondary */}
-        <path d={smoothPath(bPts)} fill="none" className="stroke-slate-400/80" strokeWidth="1.6" strokeDasharray="4 4" />
-        {/* cumulative budget with CRs — hero, glowing */}
-        <path d={smoothPath(bcrsPts)} fill="none" stroke="#3366ff" strokeWidth="2.6" strokeLinecap="round" filter="url(#frGlow)" />
-        {/* cumulative actual → forecast — gradient, glowing */}
-        <path d={smoothPath(rPts)} fill="none" stroke="url(#frRealStroke)" strokeWidth="2.6" strokeLinecap="round" filter="url(#frGlow)" />
+        <path d={smoothPath(bPts)} fill="none" className="stroke-slate-500 dark:stroke-slate-400/80" strokeWidth={isDark ? 1.6 : 2.2} strokeDasharray="5 4" />
+        {/* cumulative budget with CRs — hero (glow on dark, crisp on light) */}
+        <path d={smoothPath(bcrsPts)} fill="none" stroke="#1f47f5" strokeWidth={isDark ? 2.6 : 3.4} strokeLinecap="round" filter={isDark ? "url(#frGlow)" : undefined} />
+        {/* cumulative actual → forecast — gradient (glow on dark, crisp on light) */}
+        <path d={smoothPath(rPts)} fill="none" stroke="url(#frRealStroke)" strokeWidth={isDark ? 2.6 : 3.4} strokeLinecap="round" filter={isDark ? "url(#frGlow)" : undefined} />
 
         {/* point markers above each bar */}
         {months.map((m, i) => (
           <g key={`d${i}`}>
-            <circle cx={budgetCx(i)} cy={y(m.cumBudgetCrs)} r={hover === i ? 3.6 : 2.6} fill="#3366ff" />
+            <circle cx={budgetCx(i)} cy={y(m.cumBudgetCrs)} r={hover === i ? 3.6 : 2.6} fill="#1f47f5" />
             <circle cx={realCx(i)} cy={y(m.cumRealized)} r={hover === i ? 3.6 : 2.6} fill={m.isForecast ? "#f97316" : "#10b981"} />
           </g>
         ))}
@@ -475,9 +496,9 @@ function ComboChart({ months }) {
       )}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500">
-        <Legend cls="bg-slate-300/60 dark:bg-slate-500/40" label="Monthly Budget (with CRs)" />
-        <Legend cls="bg-emerald-300/60 dark:bg-emerald-400/30" label="Monthly Actual" />
-        <Legend cls="bg-orange-300/60 dark:bg-orange-400/30" label="Monthly Forecast" />
+        <Legend cls="bg-slate-400 dark:bg-slate-500/40" label="Monthly Budget (with CRs)" />
+        <Legend cls="bg-emerald-600 dark:bg-emerald-400/30" label="Monthly Actual" />
+        <Legend cls="bg-orange-500 dark:bg-orange-400/30" label="Monthly Forecast" />
         <span className="ml-2 flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 border-t-2 border-dashed border-slate-400" /> Cum. Budget</span>
         <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 rounded bg-brand-500" /> Cum. Budget (with CRs)</span>
         <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 rounded bg-gradient-to-r from-emerald-500 to-orange-500" /> Cum. Actual → Forecast</span>
