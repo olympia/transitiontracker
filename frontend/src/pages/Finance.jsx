@@ -982,10 +982,10 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
           </span>
         )}
       </td>
-      <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
-      <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(a.actual))}</td>
-      <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
-      <td className={`border-r border-slate-200 px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(a.total))}</td>
+      <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.budget))}</td>
+      <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(a.actual))}</td>
+      <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(a.forecast))}</td>
+      <td className={`border-r border-slate-200 px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(a.total))}</td>
       {it.months.map((m) => {
         if (isBaseCur) {
           return (
@@ -1016,10 +1016,10 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
         }
         return (
           <React.Fragment key={m.id}>
-            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${m.month > 1 ? MONTH_SEP : ""}`}>
+            <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${m.month > 1 ? MONTH_SEP : ""}`}>
               {cz(monthAmount(it, m, "budget"))}
             </td>
-            <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W}`}>
+            <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W}`}>
               {cz(monthAmount(it, m, "realized"))}
             </td>
           </React.Fragment>
@@ -1050,14 +1050,14 @@ function TotalRow({ label, agg, monthTotals, conv }) {
       >
         {label}
       </td>
-      <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.budget))}</td>
-      <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(agg.actual))}</td>
-      <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
-      <td className={`border-r border-slate-200 px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(agg.total))}</td>
+      <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.budget))}</td>
+      <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W}`}>{fmt(conv(agg.actual))}</td>
+      <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${AGG_W} ${AGG_ZEBRA}`}>{fmt(conv(agg.forecast))}</td>
+      <td className={`border-r border-slate-200 px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 dark:border-slate-700 ${AGG_W}`}>{fmt(conv(agg.total))}</td>
       {monthTotals.map((mt, idx) => (
         <React.Fragment key={idx}>
-          <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${idx > 0 ? MONTH_SEP : ""}`}>{cz(mt.b)}</td>
-          <td className={`px-3 py-1 text-right text-[13px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W}`}>{cz(mt.r)}</td>
+          <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W} ${idx > 0 ? MONTH_SEP : ""}`}>{cz(mt.b)}</td>
+          <td className={`px-3 py-1 text-right text-[11px] font-light tracking-tight tabular-nums text-slate-400 ${COL_W}`}>{cz(mt.r)}</td>
         </React.Fragment>
       ))}
       <td></td>
@@ -1154,9 +1154,6 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
     : fmt(num(value));
   // PO controls only once the forecast cell actually has a value
   const showPo = !!onToggle && num(value) !== 0;
-  // forecast cells host the obligó checkbox + PO chip, so shrink the number a
-  // notch (12px) to fit an 8-digit amount alongside them
-  const tight = !!onToggle;
   return (
     <td className={`px-2 py-0.5 ${COL_W} ${sep ? MONTH_SEP : ""} ${zebra ? "bg-slate-50/70 dark:bg-slate-800/30" : ""}`}>
       <div
@@ -1179,9 +1176,7 @@ function MoneyInput({ value, onCommit, zebra, disabled, sep, committed, poNumber
         )}
         {showPo && committed && <PoTag poNumber={poNumber} onEditPo={onEditPo} />}
         <input
-          className={`h-full w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-right ${
-            tight ? "text-[12px]" : "text-[13px]"
-          } font-light tracking-tight tabular-nums outline-none ${
+          className={`h-full w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-[11px] font-light tracking-tight tabular-nums outline-none ${
             disabled ? "cursor-not-allowed text-slate-300 dark:text-slate-600" : "text-slate-400"
           }`}
           type="text"
