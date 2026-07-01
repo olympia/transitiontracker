@@ -75,14 +75,15 @@ export default function FinancialReport({ project }) {
     () => (data ? [...new Set(data.map((d) => d.year.year))].sort((a, b) => a - b) : []),
     [data]
   );
-  const curSel = sel === "overall" || sel === "portfolio" || years.includes(sel) ? sel : "overall";
-  // "Portfolio Review" always reports today's calendar year, independent of
-  // the normal year/overall pills.
+  const SPECIAL_TABS = ["portfolio", "currsim"];
+  const curSel = sel === "overall" || SPECIAL_TABS.includes(sel) || years.includes(sel) ? sel : "overall";
+  // "Portfolio Review" and "Curr Impact Sim" always report today's calendar
+  // year, independent of the normal year/overall pills.
   const nowYear = new Date().getFullYear();
   const scoped = useMemo(() => {
     if (!data) return [];
     if (curSel === "overall") return data;
-    if (curSel === "portfolio") return data.filter((yd) => yd.year.year === nowYear);
+    if (SPECIAL_TABS.includes(curSel)) return data.filter((yd) => yd.year.year === nowYear);
     return data.filter((yd) => yd.year.year === curSel);
   }, [data, curSel, nowYear]);
 
@@ -210,8 +211,15 @@ export default function FinancialReport({ project }) {
         <button onClick={() => setSel("portfolio")} className={pillCls(curSel === "portfolio")}>
           Portfolio Review
         </button>
+        <button
+          onClick={() => setSel("currsim")}
+          className={pillCls(curSel === "currsim")}
+          title="Currency Impact Simulator"
+        >
+          Curr Impact Sim
+        </button>
       </div>
-      {curSel !== "portfolio" && currencyOptions.length > 1 && (
+      {!SPECIAL_TABS.includes(curSel) && currencyOptions.length > 1 && (
         <label className="flex items-center gap-1.5 text-sm">
           <Coins size={16} className="text-slate-400" />
           <select
@@ -238,7 +246,7 @@ export default function FinancialReport({ project }) {
         <EmptyState
           icon={BarChart3}
           title={`No data for ${
-            curSel === "overall" ? "the project" : curSel === "portfolio" ? nowYear : curSel
+            curSel === "overall" ? "the project" : SPECIAL_TABS.includes(curSel) ? nowYear : curSel
           }`}
           subtitle="Enter monthly Budget / Actual / Forecast values in Budget Details."
         />
@@ -252,6 +260,14 @@ export default function FinancialReport({ project }) {
       <div className="space-y-6">
         {yearPicker}
         <PortfolioReview scoped={scoped} codes={codes} nowYear={nowYear} />
+      </div>
+    );
+
+  if (curSel === "currsim")
+    return (
+      <div className="space-y-6">
+        {yearPicker}
+        <CurrencyImpactSim scoped={scoped} codes={codes} nowYear={nowYear} />
       </div>
     );
 
@@ -317,43 +333,80 @@ export default function FinancialReport({ project }) {
   );
 }
 
+// 3 utilization %s (of Modified Budget) derived from a buildSummary() total —
+// shared by Portfolio Review and the Currency Impact Simulator.
+function utilPct(total) {
+  const pctOf = (v) => (total.modified > 0 ? Math.round((v / total.modified) * 100) : null);
+  return {
+    actual: pctOf(total.actual),
+    actualCommit: pctOf(total.actual + total.commitment),
+    totalForecast: pctOf(total.actfc),
+  };
+}
+function UtilChip({ label, pct, bg }) {
+  return (
+    <div className={`rounded-xl border-4 border-black px-5 py-4 text-center ${bg}`}>
+      <div className="text-sm font-semibold text-black">{label}</div>
+      <div className="mt-1 text-2xl font-extrabold text-black">{pct === null ? "—" : `${pct}%`}</div>
+    </div>
+  );
+}
+// capped to the Total Forecast column's right edge, so the 3 chips share
+// exactly that width (matches the Summary table above them).
+function UtilChipsRow({ pct }) {
+  return (
+    <div
+      className="grid grid-cols-1 gap-4 sm:grid-cols-3"
+      style={{ maxWidth: summaryWidthThrough("actfc") }}
+    >
+      <UtilChip label="Budget Utilization (Actual)" pct={pct.actual} bg="bg-yellow-300" />
+      <UtilChip
+        label="Budget Utilization (Actual + Commitment)"
+        pct={pct.actualCommit}
+        bg="bg-emerald-400"
+      />
+      <UtilChip
+        label="Budget Utilization (Actual + Commitment + Forecast)"
+        pct={pct.totalForecast}
+        bg="bg-sky-200"
+      />
+    </div>
+  );
+}
+
+// the project's configured USD reporting currency + its rate for the (single)
+// in-scope year, if any — shared by Portfolio Review and the Currency Impact
+// Simulator, both of which only ever scope to one year (nowYear).
+function useProjectUsdRate(scoped, codes) {
+  const usdCode = useMemo(
+    () => [codes.base, codes.rep1, codes.rep2].find((c) => c && c.trim().toUpperCase() === "USD"),
+    [codes]
+  );
+  const rate = useMemo(() => {
+    if (!usdCode || !scoped[0]) return 0;
+    if (usdCode === codes.base) return 1;
+    const yd = scoped[0];
+    return usdCode === codes.rep1
+      ? Number(yd.year.rate_1) || 0
+      : usdCode === codes.rep2
+      ? Number(yd.year.rate_2) || 0
+      : 0;
+  }, [usdCode, codes, scoped]);
+  const ready = !!(usdCode && (usdCode === codes.base || rate > 0));
+  return { usdCode, rate, ready };
+}
+
 // Portfolio Review: always the current calendar year. Stacks the Budget
 // Summary table in base currency directly above the same table in USD
 // (tight, for PPT copy-paste), then 3 utilization chips below.
 function PortfolioReview({ scoped, codes, nowYear }) {
   const baseMult = useMemo(() => () => 1, []);
-  const usdCode = useMemo(
-    () => [codes.base, codes.rep1, codes.rep2].find((c) => c && c.trim().toUpperCase() === "USD"),
-    [codes]
-  );
-  const usdMult = useMemo(() => {
-    if (!usdCode) return null;
-    return (yd) => {
-      if (usdCode === codes.base) return 1;
-      const r =
-        usdCode === codes.rep1
-          ? Number(yd.year.rate_1) || 0
-          : usdCode === codes.rep2
-          ? Number(yd.year.rate_2) || 0
-          : 0;
-      return r > 0 ? 1 / r : 0;
-    };
-  }, [usdCode, codes]);
-  const usdReady = !!(usdCode && scoped[0] && usdMult(scoped[0]) > 0);
+  const { rate: usdRate, ready: usdReady } = useProjectUsdRate(scoped, codes);
+  const usdMult = useMemo(() => () => (usdRate > 0 ? 1 / usdRate : 0), [usdRate]);
 
   // base-currency totals drive the 3 utilization % chips (currency-agnostic ratios)
   const total = useMemo(() => buildSummary(scoped, baseMult).total, [scoped, baseMult]);
-  const pctOf = (v) => (total.modified > 0 ? Math.round((v / total.modified) * 100) : null);
-  const pctActual = pctOf(total.actual);
-  const pctActualCommit = pctOf(total.actual + total.commitment);
-  const pctTotalForecast = pctOf(total.actfc);
-
-  const chip = (label, p, bg) => (
-    <div className={`rounded-xl border-4 border-black px-5 py-4 text-center ${bg}`}>
-      <div className="text-sm font-semibold text-black">{label}</div>
-      <div className="mt-1 text-2xl font-extrabold text-black">{p === null ? "—" : `${p}%`}</div>
-    </div>
-  );
+  const pct = utilPct(total);
 
   return (
     <div className="space-y-6">
@@ -378,16 +431,105 @@ function PortfolioReview({ scoped, codes, nowYear }) {
         </div>
       </section>
 
-      {/* capped to the Total Forecast column's right edge, so the 3 chips
-          share exactly that width (matches the table above for copy-paste) */}
-      <div
-        className="grid grid-cols-1 gap-4 sm:grid-cols-3"
-        style={{ maxWidth: summaryWidthThrough("actfc") }}
-      >
-        {chip("Budget Utilization (Actual)", pctActual, "bg-yellow-300")}
-        {chip("Budget Utilization (Actual + Commitment)", pctActualCommit, "bg-emerald-400")}
-        {chip("Budget Utilization (Actual + Commitment + Forecast)", pctTotalForecast, "bg-sky-200")}
-      </div>
+      <UtilChipsRow pct={pct} />
+    </div>
+  );
+}
+
+// Currency Impact Simulator: always the current calendar year. Base-currency
+// Summary table + its utilization chips, then 3 editable USD rate inputs
+// (Actual / Commitment / Forecast) that recompute a second, simulated USD
+// Summary table + its own chips — Budget/Reallocation/Cancellation/Modified
+// Budget/Carry Over always keep the project's normal configured USD rate;
+// only the "live" execution columns move with the simulated rates.
+function CurrencyImpactSim({ scoped, codes, nowYear }) {
+  const baseMult = useMemo(() => () => 1, []);
+  const { rate: defaultUsdRate, ready: usdReady } = useProjectUsdRate(scoped, codes);
+
+  const baseTotal = useMemo(() => buildSummary(scoped, baseMult).total, [scoped, baseMult]);
+  const basePct = utilPct(baseTotal);
+
+  // 3 user-editable rates (base units per 1 USD), prefilled from the
+  // project's own configured USD rate once it's known
+  const [rActual, setRActual] = useState(null);
+  const [rCommit, setRCommit] = useState(null);
+  const [rForecast, setRForecast] = useState(null);
+  useEffect(() => {
+    if (defaultUsdRate > 0) {
+      setRActual((v) => (v === null ? defaultUsdRate : v));
+      setRCommit((v) => (v === null ? defaultUsdRate : v));
+      setRForecast((v) => (v === null ? defaultUsdRate : v));
+    }
+  }, [defaultUsdRate]);
+
+  const simMult = useMemo(() => {
+    const mBudget = defaultUsdRate > 0 ? 1 / defaultUsdRate : 0;
+    const mActual = rActual > 0 ? 1 / rActual : 0;
+    const mCommit = rCommit > 0 ? 1 / rCommit : 0;
+    const mForecast = rForecast > 0 ? 1 / rForecast : 0;
+    return () => ({ budget: mBudget, actual: mActual, commitment: mCommit, forecast: mForecast });
+  }, [defaultUsdRate, rActual, rCommit, rForecast]);
+
+  const simTotal = useMemo(() => buildSummary(scoped, simMult).total, [scoped, simMult]);
+  const simPct = utilPct(simTotal);
+
+  const rateInput = (label, val, setVal) => (
+    <label className="flex items-center gap-2 text-sm">
+      <span className="text-slate-500">{label}</span>
+      <input
+        type="number"
+        step="any"
+        className="input h-9 w-28 py-0"
+        value={val ?? ""}
+        onChange={(e) => setVal(e.target.value === "" ? null : Number(e.target.value))}
+      />
+      <span className="text-xs text-slate-400">{codes.base}/USD</span>
+    </label>
+  );
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <div className="mb-1 flex items-center gap-2">
+          <Table2 size={18} className="text-brand-600" />
+          <h2 className="text-lg font-extrabold">Currency Impact Simulator — {nowYear}</h2>
+        </div>
+        <p className="mb-4 text-sm text-slate-500">Budget Summary in {codes.base}.</p>
+        <SummaryTable scoped={scoped} yearMult={baseMult} currencyLabel={codes.base} />
+      </section>
+
+      <UtilChipsRow pct={basePct} />
+
+      <section>
+        <div className="mb-1 flex items-center gap-2">
+          <Coins size={18} className="text-brand-600" />
+          <h2 className="text-lg font-extrabold">Simulated USD rates</h2>
+        </div>
+        {!usdReady ? (
+          <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+            No USD rate configured for {nowYear}. Set USD as a reporting currency (with a rate) for
+            this project in Budget Details &rarr; Setup — Budget / Modified Budget need that baseline
+            rate even in the simulator.
+          </div>
+        ) : (
+          <>
+            <p className="mb-3 text-sm text-slate-500">
+              Override the USD rate ({codes.base} per 1 USD) for Actual, Commitment and Forecast
+              individually. Budget / Reallocation / Cancellation / Modified Budget / Carry Over stay at
+              the project's configured USD rate ({fmt(defaultUsdRate)}).
+            </p>
+            <div className="mb-4 flex flex-wrap gap-4">
+              {rateInput("Actual rate", rActual, setRActual)}
+              {rateInput("Commitment rate", rCommit, setRCommit)}
+              {rateInput("Forecast rate", rForecast, setRForecast)}
+            </div>
+            <SummaryTable scoped={scoped} yearMult={simMult} currencyLabel="USD (sim)" />
+            <div className="mt-6">
+              <UtilChipsRow pct={simPct} />
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }
@@ -792,7 +934,7 @@ function summaryWidthThrough(colKey) {
 // line up place-value-wise down a column) plus, for PCT_COLS, a separate
 // narrow left-aligned "%" cell tight against it — kept in its own column
 // rather than inline text so it never disturbs the value column's alignment.
-function SummaryCell({ colKey, val, modified, weightCls = "", colorCls = "", pctCls = "text-[7px]" }) {
+function SummaryCell({ colKey, val, modified, weightCls = "", colorCls = "", pctCls = "text-[10px]" }) {
   const finalColor = COL_TEXT_CLS[colKey] || colorCls;
   const showPct = PCT_COLS.has(colKey);
   return (
@@ -819,19 +961,23 @@ function deriveCols(a) {
 }
 // one budget item's base-converted contribution, routed to the right column.
 // Forecast months split into Commitment (PO/obligo committed) vs. open Forecast.
-function itemAgg(it, cutoff, m) {
+// `mults` = { budget, actual, commitment, forecast } — separate multipliers per
+// bucket, so the Currency Impact Simulator can apply a different simulated
+// USD rate to Actual/Commitment/Forecast while Budget-family columns keep the
+// project's normal (default) rate.
+function itemAgg(it, cutoff, mults) {
   const a = emptyAgg();
   let b = 0;
   let act = 0;
   let commit = 0;
   let fc = 0;
   for (const mm of it.months) {
-    b += monthAmount(it, mm, "budget") * m;
+    b += monthAmount(it, mm, "budget") * mults.budget;
     if (!it.is_cr) {
-      const rv = monthAmount(it, mm, "realized") * m;
-      if (mm.month < cutoff) act += rv;
-      else if (mm.po_committed) commit += rv;
-      else fc += rv;
+      const raw = monthAmount(it, mm, "realized");
+      if (mm.month < cutoff) act += raw * mults.actual;
+      else if (mm.po_committed) commit += raw * mults.commitment;
+      else fc += raw * mults.forecast;
     }
   }
   if (!it.is_cr) {
@@ -848,8 +994,10 @@ function itemAgg(it, cutoff, m) {
 
 // pure aggregation: scoped year-data + a currency multiplier -> category rows
 // (each with its expandable item-level details) + a grand total. Shared by
-// the normal per-tab SummaryTable and the Portfolio Review tab (which needs
-// the totals directly, for the utilization chips, in addition to two tables).
+// the normal per-tab SummaryTable, Portfolio Review and the Currency Impact
+// Simulator. `yearMult(yd)` may return either a single number (uniform rate,
+// the common case) or a { budget, actual, commitment, forecast } object (the
+// simulator's per-bucket rates); both shapes are normalized to the latter.
 function buildSummary(scoped, yearMult) {
   const map = new Map(); // label -> { agg, details: Map(label -> agg) }
   const order = [];
@@ -863,12 +1011,14 @@ function buildSummary(scoped, yearMult) {
   };
   for (const yd of scoped) {
     const cutoff = yd.year.forecast_from_month ?? 1;
-    const m = yearMult(yd);
+    const raw = yearMult(yd);
+    const mults =
+      typeof raw === "number" ? { budget: raw, actual: raw, commitment: raw, forecast: raw } : raw;
     for (const leg of yd.legs) {
       const catRaw = leg.category && leg.category.trim() ? leg.category : "Uncategorized";
       const isSplit = SPLIT_CATEGORIES.includes(catRaw.trim().toLowerCase());
       for (const it of leg.items) {
-        const a = itemAgg(it, cutoff, m);
+        const a = itemAgg(it, cutoff, mults);
         const label = isSplit ? (it.is_hw ? HW_ROW : IMPL_ROW) : catRaw;
         const g = group(label);
         addAgg(g.agg, a);
@@ -959,7 +1109,7 @@ function SummaryTable({ scoped, yearMult, currencyLabel, bare = false }) {
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[11px]">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[12px]">
             {rows.map((r) => {
               const hasDetails = r.details.length > 0;
               const isOpen = open.has(r.label);
