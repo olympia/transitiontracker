@@ -75,11 +75,16 @@ export default function FinancialReport({ project }) {
     () => (data ? [...new Set(data.map((d) => d.year.year))].sort((a, b) => a - b) : []),
     [data]
   );
-  const curSel = sel === "overall" || years.includes(sel) ? sel : "overall";
+  const curSel = sel === "overall" || sel === "portfolio" || years.includes(sel) ? sel : "overall";
+  // "Portfolio Review" always reports today's calendar year, independent of
+  // the normal year/overall pills.
+  const nowYear = new Date().getFullYear();
   const scoped = useMemo(() => {
     if (!data) return [];
-    return curSel === "overall" ? data : data.filter((yd) => yd.year.year === curSel);
-  }, [data, curSel]);
+    if (curSel === "overall") return data;
+    if (curSel === "portfolio") return data.filter((yd) => yd.year.year === nowYear);
+    return data.filter((yd) => yd.year.year === curSel);
+  }, [data, curSel, nowYear]);
 
   // per-year multiplier to convert a base amount into the selected currency
   // (0 = unconvertible: a reporting currency with no rate for that year)
@@ -202,8 +207,11 @@ export default function FinancialReport({ project }) {
             {yr}
           </button>
         ))}
+        <button onClick={() => setSel("portfolio")} className={pillCls(curSel === "portfolio")}>
+          Portfolio Review
+        </button>
       </div>
-      {currencyOptions.length > 1 && (
+      {curSel !== "portfolio" && currencyOptions.length > 1 && (
         <label className="flex items-center gap-1.5 text-sm">
           <Coins size={16} className="text-slate-400" />
           <select
@@ -229,13 +237,23 @@ export default function FinancialReport({ project }) {
         {yearPicker}
         <EmptyState
           icon={BarChart3}
-          title={`No data for ${curSel === "overall" ? "the project" : curSel}`}
+          title={`No data for ${
+            curSel === "overall" ? "the project" : curSel === "portfolio" ? nowYear : curSel
+          }`}
           subtitle="Enter monthly Budget / Actual / Forecast values in Budget Details."
         />
       </div>
     );
 
   const { months, actualTot, obligo, open, budgetWithCrs, missingYears } = model;
+
+  if (curSel === "portfolio")
+    return (
+      <div className="space-y-6">
+        {yearPicker}
+        <PortfolioReview scoped={scoped} codes={codes} nowYear={nowYear} />
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -256,7 +274,7 @@ export default function FinancialReport({ project }) {
           Budget elements by category{curSel === "overall" ? " (all years)" : ` (${curSel})`},
           in {cur}. Click a category to expand its elements.
         </p>
-        <SummaryTable scoped={scoped} codes={codes} cur={cur} yearMult={yearMult} />
+        <SummaryTable scoped={scoped} yearMult={yearMult} currencyLabel={cur} />
       </section>
 
       <section>
@@ -294,6 +312,76 @@ export default function FinancialReport({ project }) {
             <UtilBars actual={actualTot} obligo={obligo} open={open} budget={budgetWithCrs} />
           </div>
         </section>
+      </div>
+    </div>
+  );
+}
+
+// Portfolio Review: always the current calendar year. Stacks the Budget
+// Summary table in base currency directly above the same table in USD
+// (tight, for PPT copy-paste), then 3 utilization chips below.
+function PortfolioReview({ scoped, codes, nowYear }) {
+  const baseMult = useMemo(() => () => 1, []);
+  const usdCode = useMemo(
+    () => [codes.base, codes.rep1, codes.rep2].find((c) => c && c.trim().toUpperCase() === "USD"),
+    [codes]
+  );
+  const usdMult = useMemo(() => {
+    if (!usdCode) return null;
+    return (yd) => {
+      if (usdCode === codes.base) return 1;
+      const r =
+        usdCode === codes.rep1
+          ? Number(yd.year.rate_1) || 0
+          : usdCode === codes.rep2
+          ? Number(yd.year.rate_2) || 0
+          : 0;
+      return r > 0 ? 1 / r : 0;
+    };
+  }, [usdCode, codes]);
+  const usdReady = !!(usdCode && scoped[0] && usdMult(scoped[0]) > 0);
+
+  // base-currency totals drive the 3 utilization % chips (currency-agnostic ratios)
+  const total = useMemo(() => buildSummary(scoped, baseMult).total, [scoped, baseMult]);
+  const pctOf = (v) => (total.modified > 0 ? Math.round((v / total.modified) * 100) : null);
+  const pctActual = pctOf(total.actual);
+  const pctActualCommit = pctOf(total.actual + total.commitment);
+  const pctTotalForecast = pctOf(total.actfc);
+
+  const chip = (label, p, bg) => (
+    <div className={`rounded-xl border-4 border-black px-5 py-4 text-center ${bg}`}>
+      <div className="text-sm font-semibold text-black">{label}</div>
+      <div className="mt-1 text-2xl font-extrabold text-black">{p === null ? "—" : `${p}%`}</div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <div className="mb-1 flex items-center gap-2">
+          <Table2 size={18} className="text-brand-600" />
+          <h2 className="text-lg font-extrabold">Portfolio Review — {nowYear}</h2>
+        </div>
+        <p className="mb-4 text-sm text-slate-500">
+          Budget Summary in {codes.base} and USD, stacked for easy PPT copy-paste.
+        </p>
+        <div className="card overflow-hidden divide-y-2 divide-slate-300 dark:divide-slate-700">
+          <SummaryTable scoped={scoped} yearMult={baseMult} currencyLabel={codes.base} bare />
+          {usdReady ? (
+            <SummaryTable scoped={scoped} yearMult={usdMult} currencyLabel="USD" bare />
+          ) : (
+            <div className="bg-amber-50 px-4 py-6 text-center text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+              No USD rate configured for {nowYear}. Set USD as a reporting currency (with a rate) for
+              this project in Budget Details &rarr; Setup to see this table.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {chip("Budget Utilization (Actual)", pctActual, "bg-yellow-300")}
+        {chip("Budget Utilization (Actual + Commitment)", pctActualCommit, "bg-emerald-400")}
+        {chip("Budget Utilization (Actual + Commitment + Forecast)", pctTotalForecast, "bg-sky-200")}
       </div>
     </div>
   );
@@ -647,7 +735,7 @@ const SUMMARY_COLS = [
   { key: "actual", label: "Actual" },
   { key: "commitment", label: "Commitment" },
   { key: "forecast", label: "Forecast" },
-  { key: "actfc", label: "Actual + Commitment + Forecast" },
+  { key: "actfc", label: "Total Forecast" },
   { key: "saving", label: "Saving" },
   { key: "carry", label: "Carry Over" },
 ];
@@ -733,55 +821,64 @@ function itemAgg(it, cutoff, m) {
   return a;
 }
 
-function SummaryTable({ scoped, codes, cur, yearMult }) {
-  const [open, setOpen] = useState(() => new Set());
-
-  const { rows, total } = useMemo(() => {
-    const map = new Map(); // label -> { agg, details: Map(label -> agg) }
-    const order = [];
-    const total = emptyAgg();
-    const group = (label) => {
-      if (!map.has(label)) {
-        map.set(label, { agg: emptyAgg(), details: new Map() });
-        order.push(label);
-      }
-      return map.get(label);
-    };
-    for (const yd of scoped) {
-      const cutoff = yd.year.forecast_from_month ?? 1;
-      const m = yearMult(yd);
-      for (const leg of yd.legs) {
-        const catRaw = leg.category && leg.category.trim() ? leg.category : "Uncategorized";
-        const isSplit = SPLIT_CATEGORIES.includes(catRaw.trim().toLowerCase());
-        for (const it of leg.items) {
-          const a = itemAgg(it, cutoff, m);
-          const label = isSplit ? (it.is_hw ? HW_ROW : IMPL_ROW) : catRaw;
-          const g = group(label);
-          addAgg(g.agg, a);
-          addAgg(total, a);
-          const dl = it.is_cr
-            ? `${CR_KIND_LABEL[it.cr_kind] || "CR"}${it.name ? ` · ${it.name}` : ""}`
-            : it.name || "—";
-          const prev = g.details.get(dl) || emptyAgg();
-          addAgg(prev, a);
-          g.details.set(dl, prev);
-        }
+// pure aggregation: scoped year-data + a currency multiplier -> category rows
+// (each with its expandable item-level details) + a grand total. Shared by
+// the normal per-tab SummaryTable and the Portfolio Review tab (which needs
+// the totals directly, for the utilization chips, in addition to two tables).
+function buildSummary(scoped, yearMult) {
+  const map = new Map(); // label -> { agg, details: Map(label -> agg) }
+  const order = [];
+  const total = emptyAgg();
+  const group = (label) => {
+    if (!map.has(label)) {
+      map.set(label, { agg: emptyAgg(), details: new Map() });
+      order.push(label);
+    }
+    return map.get(label);
+  };
+  for (const yd of scoped) {
+    const cutoff = yd.year.forecast_from_month ?? 1;
+    const m = yearMult(yd);
+    for (const leg of yd.legs) {
+      const catRaw = leg.category && leg.category.trim() ? leg.category : "Uncategorized";
+      const isSplit = SPLIT_CATEGORIES.includes(catRaw.trim().toLowerCase());
+      for (const it of leg.items) {
+        const a = itemAgg(it, cutoff, m);
+        const label = isSplit ? (it.is_hw ? HW_ROW : IMPL_ROW) : catRaw;
+        const g = group(label);
+        addAgg(g.agg, a);
+        addAgg(total, a);
+        const dl = it.is_cr
+          ? `${CR_KIND_LABEL[it.cr_kind] || "CR"}${it.name ? ` · ${it.name}` : ""}`
+          : it.name || "—";
+        const prev = g.details.get(dl) || emptyAgg();
+        addAgg(prev, a);
+        g.details.set(dl, prev);
       }
     }
-    const rows = order.map((label) => {
-      const g = map.get(label);
-      return {
-        label,
-        agg: deriveCols(g.agg),
-        details: [...g.details.entries()].map(([dl, a]) => ({ label: dl, agg: deriveCols(a) })),
-      };
-    });
-    return { rows, total: deriveCols(total) };
-  }, [scoped, cur, codes, yearMult]);
+  }
+  const rows = order.map((label) => {
+    const g = map.get(label);
+    return {
+      label,
+      agg: deriveCols(g.agg),
+      details: [...g.details.entries()].map(([dl, a]) => ({ label: dl, agg: deriveCols(a) })),
+    };
+  });
+  return { rows, total: deriveCols(total) };
+}
+
+// currencyLabel: shown as a second header line under each value column.
+// bare: skip the outer "card" wrapper (used when the caller stacks two
+// tables inside one shared card, e.g. Portfolio Review base+USD).
+function SummaryTable({ scoped, yearMult, currencyLabel, bare = false }) {
+  const [open, setOpen] = useState(() => new Set());
+
+  const { rows, total } = useMemo(() => buildSummary(scoped, yearMult), [scoped, yearMult]);
 
   if (rows.length === 0)
     return (
-      <div className="card px-4 py-6 text-center text-sm text-slate-400">
+      <div className={`${bare ? "" : "card"} px-4 py-6 text-center text-sm text-slate-400`}>
         No budget elements to summarize.
       </div>
     );
@@ -793,8 +890,18 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
       return n;
     });
 
+  // second header line showing the column's currency, right under the label
+  const curLine = currencyLabel ? (
+    <>
+      <br />
+      <span className="text-[9px] font-normal normal-case tracking-normal opacity-70">
+        {currencyLabel}
+      </span>
+    </>
+  ) : null;
+
   return (
-    <div className="card overflow-hidden">
+    <div className={bare ? "" : "card overflow-hidden"}>
       <div className="overflow-x-auto">
         <table className="text-sm">
           <thead>
@@ -808,6 +915,7 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                   return (
                     <th key={c.key} className={`px-3 py-2 text-right ${color}`}>
                       {c.label}
+                      {curLine}
                     </th>
                   );
                 // pct-bearing column: header label right-aligns to the VALUE
@@ -816,7 +924,10 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                 // ignores the % column for alignment purposes.
                 return (
                   <React.Fragment key={c.key}>
-                    <th className={`pl-3 pr-1 py-2 text-right ${color}`}>{c.label}</th>
+                    <th className={`pl-3 pr-1 py-2 text-right ${color}`}>
+                      {c.label}
+                      {curLine}
+                    </th>
                     <th className="pl-0 pr-2 py-2" />
                   </React.Fragment>
                 );
