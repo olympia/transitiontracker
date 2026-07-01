@@ -651,6 +651,35 @@ const SUMMARY_COLS = [
   { key: "carry", label: "Carry Over" },
 ];
 
+// columns that show a (% of Modified Budget) next to the number
+const PCT_COLS = new Set(["actual", "forecast", "actfc", "saving"]);
+// pale column-tint backgrounds; "saving" intentionally stays untinted (white)
+const CELL_BG = {
+  actual: "bg-emerald-50 dark:bg-emerald-900/20",
+  forecast: "bg-orange-50 dark:bg-orange-900/20",
+  actfc: "bg-orange-50 dark:bg-orange-900/20",
+};
+const SUMMARY_NUM_CLS = "px-3 py-1.5 text-right tabular-nums whitespace-nowrap w-[118px] min-w-[118px]";
+const summaryNum = (v) => (Math.round(v) === 0 ? "" : fmt(v));
+// "(NN%)" of modified budget, or "" if the cell has no number or no valid base
+const summaryPct = (v, modified) => {
+  if (Math.round(v) === 0 || !(modified > 0)) return "";
+  return `(${Math.round((v / modified) * 100)}%)`;
+};
+
+// one summary-table numeric cell: value + optional column tint + optional (%)
+function SummaryCell({ colKey, val, modified, cls = "" }) {
+  const p = PCT_COLS.has(colKey) ? summaryPct(val, modified) : "";
+  return (
+    <td className={`${SUMMARY_NUM_CLS} ${CELL_BG[colKey] || ""} ${cls}`}>
+      {summaryNum(val)}
+      {p && (
+        <span className="ml-1 text-[10px] font-normal text-slate-400 dark:text-slate-500">{p}</span>
+      )}
+    </td>
+  );
+}
+
 function emptyAgg() {
   return { budget: 0, realloc: 0, cancel: 0, gencr: 0, carry: 0, actual: 0, forecast: 0 };
 }
@@ -748,9 +777,6 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
       return n;
     });
 
-  const numCls = "px-3 py-1.5 text-right tabular-nums whitespace-nowrap w-[118px] min-w-[118px]";
-  const cz = (v) => (Math.round(v) === 0 ? "" : fmt(v));
-
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
@@ -763,7 +789,7 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
               {SUMMARY_COLS.map((c) => (
                 <th
                   key={c.key}
-                  className={`px-3 py-2 text-right ${c.strong ? "text-brand-700 dark:text-brand-300" : ""}`}
+                  className={`px-3 py-2 text-right ${c.strong ? "text-brand-700 dark:text-brand-300" : ""} ${CELL_BG[c.key] || ""}`}
                 >
                   {c.label}
                 </th>
@@ -797,12 +823,13 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                       </button>
                     </td>
                     {SUMMARY_COLS.map((c) => (
-                      <td
+                      <SummaryCell
                         key={c.key}
-                        className={`${numCls} ${c.strong ? "font-semibold text-brand-700 dark:text-brand-300" : "font-medium"}`}
-                      >
-                        {cz(r.agg[c.key])}
-                      </td>
+                        colKey={c.key}
+                        val={r.agg[c.key]}
+                        modified={r.agg.modified}
+                        cls={c.strong ? "font-semibold text-brand-700 dark:text-brand-300" : "font-medium"}
+                      />
                     ))}
                   </tr>
                   {isOpen &&
@@ -812,9 +839,13 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                           {d.label}
                         </td>
                         {SUMMARY_COLS.map((c) => (
-                          <td key={c.key} className={`${numCls} font-light text-slate-500 dark:text-slate-400`}>
-                            {cz(d.agg[c.key])}
-                          </td>
+                          <SummaryCell
+                            key={c.key}
+                            colKey={c.key}
+                            val={d.agg[c.key]}
+                            modified={d.agg.modified}
+                            cls="font-light text-slate-500 dark:text-slate-400"
+                          />
                         ))}
                       </tr>
                     ))}
@@ -826,12 +857,13 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                 TOTAL
               </td>
               {SUMMARY_COLS.map((c) => (
-                <td
+                <SummaryCell
                   key={c.key}
-                  className={`${numCls} ${c.strong ? "text-brand-700 dark:text-brand-300" : ""}`}
-                >
-                  {cz(total[c.key])}
-                </td>
+                  colKey={c.key}
+                  val={total[c.key]}
+                  modified={total.modified}
+                  cls={c.strong ? "text-brand-700 dark:text-brand-300" : ""}
+                />
               ))}
             </tr>
           </tbody>
