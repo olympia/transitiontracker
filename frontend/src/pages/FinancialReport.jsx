@@ -667,7 +667,7 @@ const COL_TEXT_CLS = {
   actfc: "text-orange-500 dark:text-orange-400",
 };
 const SUMMARY_NUM_CLS = "pl-3 pr-1 py-1 text-right tabular-nums whitespace-nowrap w-[108px] min-w-[108px]";
-const SUMMARY_PCT_CLS = "pl-0 pr-2 py-1 text-left tabular-nums whitespace-nowrap w-[42px] min-w-[42px] text-[10px] font-normal";
+const SUMMARY_PCT_CLS = "pl-0 pr-2 py-1 text-left tabular-nums whitespace-nowrap w-[42px] min-w-[42px] text-[9px]";
 const summaryNum = (v) => (Math.round(v) === 0 ? "" : fmt(v));
 // "(NN%)" of modified budget, or "" if the cell has no number or no valid base
 const summaryPct = (v, modified) => {
@@ -802,18 +802,28 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
               <th className="sticky left-0 z-10 bg-slate-200 px-4 py-2 text-left dark:bg-slate-700 w-[280px] min-w-[280px]">
                 Budget Elements
               </th>
-              {SUMMARY_COLS.map((c) => (
-                <th
-                  key={c.key}
-                  colSpan={PCT_COLS.has(c.key) ? 2 : 1}
-                  className={`px-3 py-2 text-right ${COL_TEXT_CLS[c.key] || (c.strong ? "text-brand-700 dark:text-brand-300" : "")}`}
-                >
-                  {c.label}
-                </th>
-              ))}
+              {SUMMARY_COLS.map((c) => {
+                const color = COL_TEXT_CLS[c.key] || (c.strong ? "text-brand-700 dark:text-brand-300" : "");
+                if (!PCT_COLS.has(c.key))
+                  return (
+                    <th key={c.key} className={`px-3 py-2 text-right ${color}`}>
+                      {c.label}
+                    </th>
+                  );
+                // pct-bearing column: header label right-aligns to the VALUE
+                // sub-column only (own th, same padding as the value td), a
+                // separate blank th sits over the % sub-column — the header
+                // ignores the % column for alignment purposes.
+                return (
+                  <React.Fragment key={c.key}>
+                    <th className={`pl-3 pr-1 py-2 text-right ${color}`}>{c.label}</th>
+                    <th className="pl-0 pr-2 py-2" />
+                  </React.Fragment>
+                );
+              })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[13px]">
             {rows.map((r) => {
               const hasDetails = r.details.length > 0;
               const isOpen = open.has(r.label);
@@ -824,7 +834,7 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                       <button
                         type="button"
                         onClick={() => hasDetails && toggle(r.label)}
-                        className={`flex items-center gap-1.5 text-left font-semibold ${
+                        className={`flex items-center gap-1.5 text-left ${
                           hasDetails ? "" : "cursor-default"
                         }`}
                       >
@@ -845,7 +855,6 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                         colKey={c.key}
                         val={r.agg[c.key]}
                         modified={r.agg.modified}
-                        weightCls={c.strong ? "font-semibold" : "font-medium"}
                         colorCls={c.strong ? "text-brand-700 dark:text-brand-300" : ""}
                       />
                     ))}
@@ -853,7 +862,7 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                   {isOpen &&
                     r.details.map((d, i) => (
                       <tr key={`${r.label}-${i}`} className="bg-slate-50/60 dark:bg-slate-800/20">
-                        <td className="sticky left-0 z-10 bg-inherit py-0.5 pl-9 pr-4 text-[13px] font-light text-slate-500 dark:text-slate-400 w-[280px] min-w-[280px]">
+                        <td className="sticky left-0 z-10 bg-inherit py-0.5 pl-9 pr-4 text-[12px] text-slate-500 dark:text-slate-400 w-[280px] min-w-[280px]">
                           {d.label}
                         </td>
                         {SUMMARY_COLS.map((c) => (
@@ -862,7 +871,6 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                             colKey={c.key}
                             val={d.agg[c.key]}
                             modified={d.agg.modified}
-                            weightCls="font-light"
                             colorCls="text-slate-500 dark:text-slate-400"
                           />
                         ))}
@@ -871,7 +879,7 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                 </React.Fragment>
               );
             })}
-            <tr className="border-t-2 border-slate-300 bg-slate-100 font-bold dark:border-slate-600 dark:bg-slate-800/60">
+            <tr className="border-t-2 border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-800/60">
               <td className="sticky left-0 z-10 bg-slate-100 px-4 py-2 dark:bg-slate-800/60 w-[280px] min-w-[280px]">
                 TOTAL
               </td>
