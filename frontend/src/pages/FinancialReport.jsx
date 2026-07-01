@@ -645,23 +645,29 @@ const SUMMARY_COLS = [
   { key: "cancel", label: "Cancellation" },
   { key: "modified", label: "Modified Budget", strong: true },
   { key: "actual", label: "Actual" },
+  { key: "commitment", label: "Commitment" },
   { key: "forecast", label: "Forecast" },
-  { key: "actfc", label: "Actual + Forecast" },
+  { key: "actfc", label: "Actual + Commitment + Forecast" },
   { key: "saving", label: "Saving" },
   { key: "carry", label: "Carry Over" },
 ];
 
-// columns that show a (% of Modified Budget) next to the number
-const PCT_COLS = new Set(["actual", "forecast", "actfc", "saving"]);
+// columns that show a (% of Modified Budget) next to the number, each in its
+// own narrow left-aligned cell right after the (fixed-width, right-aligned)
+// value cell, so the value columns keep place-value alignment across rows.
+const PCT_COLS = new Set(["actual", "commitment", "forecast", "actfc", "saving"]);
 // font colors matching the Actual/Forecast series colors in the Project Budget
 // Forecast chart above (fill-emerald-600/fill-orange-500 on the bars); these
-// win over any default/detail-row color passed in via colorCls.
+// win over any default/detail-row color passed in via colorCls. Commitment
+// (obligo) is part of the forecast family, so it shares the orange.
 const COL_TEXT_CLS = {
   actual: "text-emerald-600 dark:text-emerald-400",
+  commitment: "text-orange-500 dark:text-orange-400",
   forecast: "text-orange-500 dark:text-orange-400",
   actfc: "text-orange-500 dark:text-orange-400",
 };
-const SUMMARY_NUM_CLS = "px-3 py-1.5 text-right tabular-nums whitespace-nowrap w-[118px] min-w-[118px]";
+const SUMMARY_NUM_CLS = "pl-3 pr-1 py-1 text-right tabular-nums whitespace-nowrap w-[108px] min-w-[108px]";
+const SUMMARY_PCT_CLS = "pl-0 pr-2 py-1 text-left tabular-nums whitespace-nowrap w-[42px] min-w-[42px] text-[10px] font-normal";
 const summaryNum = (v) => (Math.round(v) === 0 ? "" : fmt(v));
 // "(NN%)" of modified budget, or "" if the cell has no number or no valid base
 const summaryPct = (v, modified) => {
@@ -669,20 +675,25 @@ const summaryPct = (v, modified) => {
   return `(${Math.round((v / modified) * 100)}%)`;
 };
 
-// one summary-table numeric cell: value + optional chart-matched font color + optional (%)
+// one summary-table metric: a right-aligned value cell (fixed width, so digits
+// line up place-value-wise down a column) plus, for PCT_COLS, a separate
+// narrow left-aligned "%" cell tight against it — kept in its own column
+// rather than inline text so it never disturbs the value column's alignment.
 function SummaryCell({ colKey, val, modified, weightCls = "", colorCls = "" }) {
   const finalColor = COL_TEXT_CLS[colKey] || colorCls;
-  const p = PCT_COLS.has(colKey) ? summaryPct(val, modified) : "";
+  const showPct = PCT_COLS.has(colKey);
   return (
-    <td className={`${SUMMARY_NUM_CLS} ${weightCls} ${finalColor}`}>
-      {summaryNum(val)}
-      {p && <span className={`ml-1 text-[10px] font-normal ${finalColor}`}>{p}</span>}
-    </td>
+    <>
+      <td className={`${SUMMARY_NUM_CLS} ${weightCls} ${finalColor}`}>{summaryNum(val)}</td>
+      {showPct && (
+        <td className={`${SUMMARY_PCT_CLS} ${finalColor}`}>{summaryPct(val, modified)}</td>
+      )}
+    </>
   );
 }
 
 function emptyAgg() {
-  return { budget: 0, realloc: 0, cancel: 0, gencr: 0, carry: 0, actual: 0, forecast: 0 };
+  return { budget: 0, realloc: 0, cancel: 0, gencr: 0, carry: 0, actual: 0, commitment: 0, forecast: 0 };
 }
 function addAgg(t, a) {
   for (const k in a) t[k] += a[k];
@@ -690,26 +701,30 @@ function addAgg(t, a) {
 // add the derived columns (modified / actfc / saving) for rendering
 function deriveCols(a) {
   const modified = a.budget + a.realloc + a.cancel + a.gencr;
-  const actfc = a.actual + a.forecast;
+  const actfc = a.actual + a.commitment + a.forecast;
   return { ...a, modified, actfc, saving: modified - actfc };
 }
-// one budget item's base-converted contribution, routed to the right column
+// one budget item's base-converted contribution, routed to the right column.
+// Forecast months split into Commitment (PO/obligo committed) vs. open Forecast.
 function itemAgg(it, cutoff, m) {
   const a = emptyAgg();
   let b = 0;
   let act = 0;
+  let commit = 0;
   let fc = 0;
   for (const mm of it.months) {
     b += monthAmount(it, mm, "budget") * m;
     if (!it.is_cr) {
       const rv = monthAmount(it, mm, "realized") * m;
       if (mm.month < cutoff) act += rv;
+      else if (mm.po_committed) commit += rv;
       else fc += rv;
     }
   }
   if (!it.is_cr) {
     a.budget = b;
     a.actual = act;
+    a.commitment = commit;
     a.forecast = fc;
   } else if (it.cr_kind === "reallocation") a.realloc = b;
   else if (it.cr_kind === "cancelation") a.cancel = b;
@@ -790,6 +805,7 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
               {SUMMARY_COLS.map((c) => (
                 <th
                   key={c.key}
+                  colSpan={PCT_COLS.has(c.key) ? 2 : 1}
                   className={`px-3 py-2 text-right ${COL_TEXT_CLS[c.key] || (c.strong ? "text-brand-700 dark:text-brand-300" : "")}`}
                 >
                   {c.label}
@@ -804,7 +820,7 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
               return (
                 <React.Fragment key={r.label}>
                   <tr className="bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/50">
-                    <td className="sticky left-0 z-10 bg-inherit px-4 py-1.5 w-[280px] min-w-[280px]">
+                    <td className="sticky left-0 z-10 bg-inherit px-4 py-1 w-[280px] min-w-[280px]">
                       <button
                         type="button"
                         onClick={() => hasDetails && toggle(r.label)}
@@ -837,7 +853,7 @@ function SummaryTable({ scoped, codes, cur, yearMult }) {
                   {isOpen &&
                     r.details.map((d, i) => (
                       <tr key={`${r.label}-${i}`} className="bg-slate-50/60 dark:bg-slate-800/20">
-                        <td className="sticky left-0 z-10 bg-inherit py-1 pl-9 pr-4 text-[13px] font-light text-slate-500 dark:text-slate-400 w-[280px] min-w-[280px]">
+                        <td className="sticky left-0 z-10 bg-inherit py-0.5 pl-9 pr-4 text-[13px] font-light text-slate-500 dark:text-slate-400 w-[280px] min-w-[280px]">
                           {d.label}
                         </td>
                         {SUMMARY_COLS.map((c) => (
