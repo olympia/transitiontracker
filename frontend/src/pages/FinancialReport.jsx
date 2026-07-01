@@ -378,7 +378,12 @@ function PortfolioReview({ scoped, codes, nowYear }) {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* capped to the Total Forecast column's right edge, so the 3 chips
+          share exactly that width (matches the table above for copy-paste) */}
+      <div
+        className="grid grid-cols-1 gap-4 sm:grid-cols-3"
+        style={{ maxWidth: summaryWidthThrough("actfc") }}
+      >
         {chip("Budget Utilization (Actual)", pctActual, "bg-yellow-300")}
         {chip("Budget Utilization (Actual + Commitment)", pctActualCommit, "bg-emerald-400")}
         {chip("Budget Utilization (Actual + Commitment + Forecast)", pctTotalForecast, "bg-sky-200")}
@@ -762,6 +767,26 @@ const summaryPct = (v, modified) => {
   if (Math.round(v) === 0 || !(modified > 0)) return "";
   return `(${Math.round((v / modified) * 100)}%)`;
 };
+
+// numeric mirrors of the pixel widths baked into the Tailwind arbitrary-value
+// classes above (SUMMARY_NUM_CLS w-[108px], SUMMARY_PCT_CLS w-[42px]) and the
+// sticky "Budget Elements" column (w-[280px], set literally in the table JSX
+// since Tailwind's class scanner needs the literal string, not a template).
+// Keep these three in sync by hand if those widths ever change.
+const SUMMARY_LABEL_W = 280;
+const SUMMARY_VAL_W = 108;
+const SUMMARY_PCT_W = 42;
+// cumulative table width from the left edge through the right edge of the
+// given column (inclusive of its % sub-column, if any) — used to size the
+// Portfolio Review utilization chips to match the Total Forecast column.
+function summaryWidthThrough(colKey) {
+  let w = SUMMARY_LABEL_W;
+  for (const c of SUMMARY_COLS) {
+    w += SUMMARY_VAL_W + (PCT_COLS.has(c.key) ? SUMMARY_PCT_W : 0);
+    if (c.key === colKey) break;
+  }
+  return w;
+}
 
 // one summary-table metric: a right-aligned value cell (fixed width, so digits
 // line up place-value-wise down a column) plus, for PCT_COLS, a separate
