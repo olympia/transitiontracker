@@ -874,8 +874,31 @@ def update_category(
     obj = db.get(models.WbsCategory, cat_id)
     if not obj:
         raise HTTPException(404, "Category not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    old_name = obj.name
+    for k, v in data.items():
         setattr(obj, k, v)
+    new_name = data.get("name")
+    # WbsLeg.category is a copied label (string), not a live FK to WbsCategory
+    # (so deleting a category never breaks existing legs) — so a rename here
+    # has to be cascaded by hand into every leg, across all financial years
+    # of this project, that was still holding the old label.
+    if new_name is not None and new_name != old_name and old_name:
+        year_ids = [
+            y.id
+            for y in db.query(models.FinancialYear.id)
+            .filter(models.FinancialYear.project_id == obj.project_id)
+            .all()
+        ]
+        if year_ids:
+            (
+                db.query(models.WbsLeg)
+                .filter(
+                    models.WbsLeg.year_id.in_(year_ids),
+                    models.WbsLeg.category == old_name,
+                )
+                .update({"category": new_name}, synchronize_session=False)
+            )
     db.commit()
     db.refresh(obj)
     return obj
