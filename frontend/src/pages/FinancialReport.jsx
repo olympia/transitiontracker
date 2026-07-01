@@ -760,7 +760,7 @@ const COL_TEXT_CLS = {
   actfc: "text-orange-500 dark:text-orange-400",
 };
 const SUMMARY_NUM_CLS = "pl-3 pr-1 py-1 text-right tabular-nums whitespace-nowrap w-[108px] min-w-[108px]";
-const SUMMARY_PCT_CLS = "pl-0 pr-2 py-1 text-left tabular-nums whitespace-nowrap w-[42px] min-w-[42px] text-[9px]";
+const SUMMARY_PCT_CLS = "pl-0 pr-2 py-1 text-left tabular-nums whitespace-nowrap w-[42px] min-w-[42px]";
 const summaryNum = (v) => (Math.round(v) === 0 ? "" : fmt(v));
 // "(NN%)" of modified budget, or "" if the cell has no number or no valid base
 const summaryPct = (v, modified) => {
@@ -792,14 +792,14 @@ function summaryWidthThrough(colKey) {
 // line up place-value-wise down a column) plus, for PCT_COLS, a separate
 // narrow left-aligned "%" cell tight against it — kept in its own column
 // rather than inline text so it never disturbs the value column's alignment.
-function SummaryCell({ colKey, val, modified, weightCls = "", colorCls = "" }) {
+function SummaryCell({ colKey, val, modified, weightCls = "", colorCls = "", pctCls = "text-[7px]" }) {
   const finalColor = COL_TEXT_CLS[colKey] || colorCls;
   const showPct = PCT_COLS.has(colKey);
   return (
     <>
       <td className={`${SUMMARY_NUM_CLS} ${weightCls} ${finalColor}`}>{summaryNum(val)}</td>
       {showPct && (
-        <td className={`${SUMMARY_PCT_CLS} ${finalColor}`}>{summaryPct(val, modified)}</td>
+        <td className={`${SUMMARY_PCT_CLS} ${pctCls} ${finalColor}`}>{summaryPct(val, modified)}</td>
       )}
     </>
   );
@@ -959,14 +959,14 @@ function SummaryTable({ scoped, yearMult, currencyLabel, bare = false }) {
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[13px]">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[11px]">
             {rows.map((r) => {
               const hasDetails = r.details.length > 0;
               const isOpen = open.has(r.label);
               return (
                 <React.Fragment key={r.label}>
                   <tr className="bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/50">
-                    <td className="sticky left-0 z-10 bg-inherit px-4 py-1 w-[280px] min-w-[280px]">
+                    <td className="sticky left-0 z-10 bg-inherit px-4 py-1 text-[13px] w-[280px] min-w-[280px]">
                       <button
                         type="button"
                         onClick={() => hasDetails && toggle(r.label)}
@@ -1015,7 +1015,7 @@ function SummaryTable({ scoped, yearMult, currencyLabel, bare = false }) {
                 </React.Fragment>
               );
             })}
-            <tr className="border-t-2 border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-800/60">
+            <tr className="border-t-2 border-slate-300 bg-slate-100 text-[13px] dark:border-slate-600 dark:bg-slate-800/60">
               <td className="sticky left-0 z-10 bg-slate-100 px-4 py-2 dark:bg-slate-800/60 w-[280px] min-w-[280px]">
                 TOTAL
               </td>
@@ -1026,6 +1026,7 @@ function SummaryTable({ scoped, yearMult, currencyLabel, bare = false }) {
                   val={total[c.key]}
                   modified={total.modified}
                   colorCls={c.strong ? "text-brand-700 dark:text-brand-300" : ""}
+                  pctCls="text-[9px]"
                 />
               ))}
             </tr>
