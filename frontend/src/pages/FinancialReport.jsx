@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BarChart3, PieChart, TrendingUp, Table2, Coins, ChevronRight } from "lucide-react";
+import { BarChart3, PieChart, TrendingUp, Table2, Coins, ChevronRight, FileSpreadsheet } from "lucide-react";
 import { api } from "../api";
 import { Spinner, EmptyState } from "../components/ui.jsx";
 
@@ -473,6 +473,27 @@ function CurrencyImpactSim({ scoped, codes, nowYear }) {
   const simTotal = useMemo(() => buildSummary(scoped, simMult).total, [scoped, simMult]);
   const simPct = utilPct(simTotal);
 
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportCurrencySimXlsx({
+        scoped,
+        codes,
+        defaultUsdRate,
+        rActual,
+        rCommit,
+        rForecast,
+        nowYear,
+      });
+    } catch (e) {
+      console.error("Excel export failed", e);
+      alert("Excel export failed: " + (e?.message || e));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const rateInput = (label, val, setVal) => (
     <label className="flex items-center gap-2 text-sm">
       <span className="text-slate-500">{label}</span>
@@ -529,6 +550,24 @@ function CurrencyImpactSim({ scoped, codes, nowYear }) {
             </div>
           </>
         )}
+      </section>
+
+      <section className="border-t border-slate-200 pt-5 dark:border-slate-700">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting}
+            className="btn btn-primary inline-flex items-center gap-2 disabled:opacity-60"
+          >
+            <FileSpreadsheet size={16} />
+            {exporting ? "Exporting…" : "Export to Excel"}
+          </button>
+          <p className="text-xs text-slate-500">
+            Exports the base {codes.base} table plus editable rate cells and a formula-driven
+            USD table — change the rates in Excel and the USD numbers recalculate.
+          </p>
+        </div>
       </section>
     </div>
   );
@@ -1041,6 +1080,159 @@ function buildSummary(scoped, yearMult) {
     };
   });
   return { rows, total: deriveCols(total) };
+}
+
+// ------------------------------------------------ Currency Sim -> Excel export
+// Column layout for the exported summary tables (letters B..K, in this order).
+// `rate` says how the SIMULATED USD cell is computed from the base cell:
+//   default/actual/commit/forecast -> base / <that rate cell>
+//   sum      -> Actual_usd + Commitment_usd + Forecast_usd (own row)
+//   saving   -> Modified_usd - TotalForecast_usd (own row)
+const XLSX_COLS = [
+  { key: "budget", label: "Budget", rate: "default" },
+  { key: "realloc", label: "Reallocation", rate: "default" },
+  { key: "cancel", label: "Cancellation", rate: "default" },
+  { key: "modified", label: "Modified Budget", rate: "default", strong: true },
+  { key: "actual", label: "Actual", rate: "actual" },
+  { key: "commitment", label: "Commitment", rate: "commit" },
+  { key: "forecast", label: "Forecast", rate: "forecast" },
+  { key: "actfc", label: "Total Forecast", rate: "sum" },
+  { key: "saving", label: "Saving", rate: "saving" },
+  { key: "carry", label: "Carry Over", rate: "default" },
+];
+// Excel column letter for value column i (0-based): B, C, D, ... (A is the label)
+const xlsxColLetter = (i) => String.fromCharCode(66 + i);
+// rate input cells (see layout below): default=B2, actual=B3, commit=B4, forecast=B5
+const RATE_ADDR = { default: "$B$2", actual: "$B$3", commit: "$B$4", forecast: "$B$5" };
+
+// Build and download an .xlsx that mirrors the Currency Impact Simulator:
+// an editable rate block, the base-currency summary as constants, and a
+// simulated-USD summary made of formulas that reference the rate cells, so the
+// USD table live-recalculates in Excel whenever a rate is changed.
+async function exportCurrencySimXlsx({ scoped, codes, defaultUsdRate, rActual, rCommit, rForecast, nowYear }) {
+  const ExcelJS = (await import("exceljs")).default;
+  const { rows, total } = buildSummary(scoped, () => 1); // base-currency source values
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Transition Tracker";
+  wb.created = new Date();
+  const ws = wb.addWorksheet(`Currency Sim ${nowYear}`);
+
+  const MONEY = "#,##0";
+  const RATE_FMT = "#,##0.####";
+  const HEAD_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2E8F0" } };
+  const TOTAL_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F5F9" } };
+  const INPUT_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
+  const thin = { style: "thin", color: { argb: "FFBFC7D2" } };
+  const BOX = { top: thin, left: thin, bottom: thin, right: thin };
+
+  // column widths
+  ws.getColumn(1).width = 34;
+  for (let i = 0; i < XLSX_COLS.length; i++) ws.getColumn(2 + i).width = 15;
+
+  // --- title -----------------------------------------------------------------
+  ws.getCell("A1").value = `Currency Impact Simulator — ${nowYear}`;
+  ws.getCell("A1").font = { bold: true, size: 14 };
+
+  // --- editable rate block (rows 2..5) --------------------------------------
+  const rateRows = [
+    ["Default USD rate", defaultUsdRate, "default"],
+    ["Actual rate", rActual, "actual"],
+    ["Commitment rate", rCommit, "commit"],
+    ["Forecast rate", rForecast, "forecast"],
+  ];
+  rateRows.forEach(([label], idx) => {
+    const r = 2 + idx;
+    ws.getCell(`A${r}`).value = `${label} (${codes.base}/USD)`;
+    ws.getCell(`A${r}`).font = { bold: true };
+    const c = ws.getCell(`B${r}`);
+    c.value = Number(rateRows[idx][1]) || 0;
+    c.numFmt = RATE_FMT;
+    c.fill = INPUT_FILL;
+    c.border = BOX;
+    c.font = { bold: true };
+  });
+  ws.getCell("A6").value =
+    "Edit the yellow rate cells above — the simulated USD table below recalculates automatically.";
+  ws.getCell("A6").font = { italic: true, size: 9, color: { argb: "FF64748B" } };
+
+  // helper: write one summary table (header + category rows + TOTAL).
+  // `usd` false -> base constants; true -> formulas referencing baseFirstRow.
+  const writeTable = (startRow, subtitle, currencyLabel, usd, baseFirstRow) => {
+    ws.getCell(`A${startRow}`).value = subtitle;
+    ws.getCell(`A${startRow}`).font = { bold: true, size: 12 };
+    const headRow = startRow + 1;
+    // header
+    const hLabel = ws.getCell(`A${headRow}`);
+    hLabel.value = `Budget Elements (${currencyLabel})`;
+    hLabel.font = { bold: true };
+    hLabel.fill = HEAD_FILL;
+    hLabel.border = BOX;
+    XLSX_COLS.forEach((col, i) => {
+      const cell = ws.getCell(`${xlsxColLetter(i)}${headRow}`);
+      cell.value = col.label;
+      cell.font = { bold: true };
+      cell.alignment = { horizontal: "right", wrapText: true };
+      cell.fill = HEAD_FILL;
+      cell.border = BOX;
+    });
+    // body
+    const bodyRows = [...rows.map((r) => ({ label: r.label, agg: r.agg })), { label: "TOTAL", agg: total }];
+    bodyRows.forEach((br, ri) => {
+      const excelRow = headRow + 1 + ri;
+      const isTotal = ri === bodyRows.length - 1;
+      const lc = ws.getCell(`A${excelRow}`);
+      lc.value = br.label;
+      lc.border = BOX;
+      if (isTotal) lc.font = { bold: true };
+      if (isTotal) lc.fill = TOTAL_FILL;
+      XLSX_COLS.forEach((col, i) => {
+        const L = xlsxColLetter(i);
+        const cell = ws.getCell(`${L}${excelRow}`);
+        if (!usd) {
+          cell.value = Math.round(br.agg[col.key] || 0);
+        } else {
+          const bRow = baseFirstRow + ri; // matching base row
+          if (col.rate === "sum") {
+            const F = xlsxColLetter(4), G = xlsxColLetter(5), H = xlsxColLetter(6);
+            cell.value = { formula: `${F}${excelRow}+${G}${excelRow}+${H}${excelRow}` };
+          } else if (col.rate === "saving") {
+            const E = xlsxColLetter(3), I = xlsxColLetter(7);
+            cell.value = { formula: `${E}${excelRow}-${I}${excelRow}` };
+          } else {
+            const addr = RATE_ADDR[col.rate];
+            cell.value = { formula: `IF(${addr}>0,${L}${bRow}/${addr},0)` };
+          }
+        }
+        cell.numFmt = MONEY;
+        cell.alignment = { horizontal: "right" };
+        cell.border = BOX;
+        if (isTotal) cell.font = { bold: true };
+        if (isTotal) cell.fill = TOTAL_FILL;
+        if (col.strong && !isTotal) cell.font = { bold: true };
+      });
+    });
+    return headRow + 1; // first body row (for USD to reference)
+  };
+
+  const baseTitleRow = 8;
+  const baseFirstBody = writeTable(baseTitleRow, `Budget Summary — ${codes.base} (source values)`, codes.base, false, null);
+  const nBody = rows.length + 1; // categories + TOTAL
+  const usdTitleRow = baseFirstBody + nBody + 2;
+  writeTable(usdTitleRow, "Simulated USD — recalculates from the rates above", "USD (sim)", true, baseFirstBody);
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `currency-impact-sim-${nowYear}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // currencyLabel: shown as a second header line under each value column.
