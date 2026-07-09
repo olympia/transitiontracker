@@ -1212,14 +1212,44 @@ async function exportCurrencySimXlsx({ scoped, codes, defaultUsdRate, rActual, r
         if (col.strong && !isTotal) cell.font = { bold: true };
       });
     });
-    return headRow + 1; // first body row (for USD to reference)
+    return { firstBody: headRow + 1, totalRow: headRow + 1 + rows.length };
+  };
+
+  // chips block: the 3 utilization %s (of Modified Budget) as formulas off a
+  // table's TOTAL row, so the USD chips recalc when the rates change. Mirrors
+  // utilPct(): actual/modified, (actual+commit)/modified, actfc/modified.
+  const writeChips = (startRow, totalRow, title) => {
+    ws.getCell(`A${startRow}`).value = title;
+    ws.getCell(`A${startRow}`).font = { bold: true, size: 11 };
+    const E = xlsxColLetter(3), F = xlsxColLetter(4), G = xlsxColLetter(5), I = xlsxColLetter(7);
+    const eT = `${E}${totalRow}`, fT = `${F}${totalRow}`, gT = `${G}${totalRow}`, iT = `${I}${totalRow}`;
+    const specs = [
+      { label: "Budget Utilization (Actual)", f: `IF(${eT}>0,${fT}/${eT},"—")`, argb: "FFFDE047" },
+      { label: "Budget Utilization (Actual + Commitment)", f: `IF(${eT}>0,(${fT}+${gT})/${eT},"—")`, argb: "FF34D399" },
+      { label: "Budget Utilization (Actual + Commitment + Forecast)", f: `IF(${eT}>0,${iT}/${eT},"—")`, argb: "FF7DD3FC" },
+    ];
+    specs.forEach((s, i) => {
+      const r = startRow + 1 + i;
+      const lc = ws.getCell(`A${r}`);
+      lc.value = s.label;
+      lc.border = BOX;
+      const vc = ws.getCell(`B${r}`);
+      vc.value = { formula: s.f };
+      vc.numFmt = "0%";
+      vc.alignment = { horizontal: "center" };
+      vc.font = { bold: true };
+      vc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: s.argb } };
+      vc.border = BOX;
+    });
+    return startRow + 1 + specs.length; // next free row
   };
 
   const baseTitleRow = 8;
-  const baseFirstBody = writeTable(baseTitleRow, `Budget Summary — ${codes.base} (source values)`, codes.base, false, null);
-  const nBody = rows.length + 1; // categories + TOTAL
-  const usdTitleRow = baseFirstBody + nBody + 2;
-  writeTable(usdTitleRow, "Simulated USD — recalculates from the rates above", "USD (sim)", true, baseFirstBody);
+  const baseTbl = writeTable(baseTitleRow, `Budget Summary — ${codes.base} (source values)`, codes.base, false, null);
+  const baseChipsEnd = writeChips(baseTbl.totalRow + 2, baseTbl.totalRow, `Budget Utilization — ${codes.base}`);
+  const usdTitleRow = baseChipsEnd + 2;
+  const usdTbl = writeTable(usdTitleRow, "Simulated USD — recalculates from the rates above", "USD (sim)", true, baseTbl.firstBody);
+  writeChips(usdTbl.totalRow + 2, usdTbl.totalRow, "Budget Utilization — USD (sim)");
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], {
