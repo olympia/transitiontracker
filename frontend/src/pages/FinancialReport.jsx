@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, PieChart, TrendingUp, Table2, Coins, ChevronRight, FileSpreadsheet } from "lucide-react";
 import { api } from "../api";
 import { Spinner, EmptyState } from "../components/ui.jsx";
@@ -1477,6 +1477,19 @@ function BudgetOverview({ scoped, yearMult }) {
   const actPct = pctOf(total.actual);
   const acPct = pctOf(total.actual + total.commitment);
 
+  // measure the table's rendered width so the two chips together span exactly
+  // half of it (the chips row width = tableW/2, split into two equal columns)
+  const tableRef = useRef(null);
+  const [tableW, setTableW] = useState(0);
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setTableW(el.offsetWidth));
+    ro.observe(el);
+    setTableW(el.offsetWidth);
+    return () => ro.disconnect();
+  }, []);
+
   const NUM = "px-4 py-2 text-right tabular-nums whitespace-nowrap";
   const bodyRow = (label, a, key) => (
     <tr key={key} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
@@ -1490,7 +1503,7 @@ function BudgetOverview({ scoped, yearMult }) {
 
   return (
     <div className="space-y-5">
-      <div className="card w-fit max-w-full overflow-hidden">
+      <div ref={tableRef} className="card w-fit max-w-full overflow-hidden">
         <div className="overflow-x-auto">
           <table className="text-sm">
             <thead>
@@ -1516,13 +1529,16 @@ function BudgetOverview({ scoped, yearMult }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-4">
-        <div className="min-w-[220px] rounded-lg bg-yellow-400 px-6 py-4 text-center text-black">
-          <div className="text-sm font-bold">Budget utilization Actual</div>
+      <div
+        className="grid grid-cols-2 gap-4"
+        style={{ width: tableW ? tableW / 2 : undefined }}
+      >
+        <div className="rounded-lg bg-yellow-400 px-3 py-4 text-center text-black">
+          <div className="text-sm font-bold leading-tight">Budget utilization Actual</div>
           <div className="mt-1 text-2xl font-extrabold">{actPct === null ? "—" : `${actPct}%`}</div>
         </div>
-        <div className="min-w-[220px] rounded-lg bg-green-500 px-6 py-4 text-center text-black">
-          <div className="text-sm font-bold">Budget utilization Actual + committed</div>
+        <div className="rounded-lg bg-green-500 px-3 py-4 text-center text-black">
+          <div className="text-sm font-bold leading-tight">Budget utilization Actual + committed</div>
           <div className="mt-1 text-2xl font-extrabold">{acPct === null ? "—" : `${acPct}%`}</div>
         </div>
       </div>
