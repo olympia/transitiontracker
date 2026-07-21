@@ -295,6 +295,24 @@ export default function FinancialReport({ project }) {
 
       <section>
         <div className="mb-1 flex items-center gap-2">
+          <Table2 size={18} className="text-brand-600" />
+          <h2 className="text-lg font-extrabold">Budget Summary by WBS</h2>
+        </div>
+        <p className="mb-4 text-sm text-slate-500">
+          Budget elements by WBS leg{curSel === "overall" ? " (all years)" : ` (${curSel})`},
+          in {cur}. Click a WBS to expand its elements.
+        </p>
+        <SummaryTable
+          scoped={scoped}
+          yearMult={yearMult}
+          currencyLabel={cur}
+          groupBy="wbs"
+          labelHeader="WBS"
+        />
+      </section>
+
+      <section>
+        <div className="mb-1 flex items-center gap-2">
           <TrendingUp size={18} className="text-brand-600" />
           <h2 className="text-lg font-extrabold">Project Budget Forecast</h2>
         </div>
@@ -1031,13 +1049,25 @@ function itemAgg(it, cutoff, mults) {
   return a;
 }
 
-// pure aggregation: scoped year-data + a currency multiplier -> category rows
+// row label for a WBS leg in the by-WBS summary: "code · name" (falling back
+// to whichever of code/name is present). Same code+name across years merge
+// into one row, so the Overall tab shows a true per-WBS total across years.
+function wbsLabel(leg) {
+  const code = (leg.code || "").trim();
+  const name = (leg.name || "").trim();
+  if (code && name) return `${code} · ${name}`;
+  return code || name || "Uncategorized WBS";
+}
+
+// pure aggregation: scoped year-data + a currency multiplier -> grouped rows
 // (each with its expandable item-level details) + a grand total. Shared by
 // the normal per-tab SummaryTable, Portfolio Review and the Currency Impact
 // Simulator. `yearMult(yd)` may return either a single number (uniform rate,
 // the common case) or a { budget, actual, commitment, forecast } object (the
 // simulator's per-bucket rates); both shapes are normalized to the latter.
-function buildSummary(scoped, yearMult) {
+// `groupMode`: "category" (default, budget categories with the External CAPEX
+// HW/Implementation split) or "wbs" (one row per WBS leg, no split).
+function buildSummary(scoped, yearMult, groupMode = "category") {
   const map = new Map(); // label -> { agg, details: Map(label -> agg) }
   const order = [];
   const total = emptyAgg();
@@ -1055,10 +1085,11 @@ function buildSummary(scoped, yearMult) {
       typeof raw === "number" ? { budget: raw, actual: raw, commitment: raw, forecast: raw } : raw;
     for (const leg of yd.legs) {
       const catRaw = leg.category && leg.category.trim() ? leg.category : "Uncategorized";
-      const isSplit = SPLIT_CATEGORIES.includes(catRaw.trim().toLowerCase());
+      const isSplit = groupMode === "category" && SPLIT_CATEGORIES.includes(catRaw.trim().toLowerCase());
+      const wbs = wbsLabel(leg);
       for (const it of leg.items) {
         const a = itemAgg(it, cutoff, mults);
-        const label = isSplit ? (it.is_hw ? HW_ROW : IMPL_ROW) : catRaw;
+        const label = groupMode === "wbs" ? wbs : isSplit ? (it.is_hw ? HW_ROW : IMPL_ROW) : catRaw;
         const g = group(label);
         addAgg(g.agg, a);
         addAgg(total, a);
@@ -1268,10 +1299,13 @@ async function exportCurrencySimXlsx({ scoped, codes, defaultUsdRate, rActual, r
 // currencyLabel: shown as a second header line under each value column.
 // bare: skip the outer "card" wrapper (used when the caller stacks two
 // tables inside one shared card, e.g. Portfolio Review base+USD).
-function SummaryTable({ scoped, yearMult, currencyLabel, bare = false }) {
+function SummaryTable({ scoped, yearMult, currencyLabel, bare = false, groupBy = "category", labelHeader = "Budget Elements" }) {
   const [open, setOpen] = useState(() => new Set());
 
-  const { rows, total } = useMemo(() => buildSummary(scoped, yearMult), [scoped, yearMult]);
+  const { rows, total } = useMemo(
+    () => buildSummary(scoped, yearMult, groupBy),
+    [scoped, yearMult, groupBy]
+  );
 
   if (rows.length === 0)
     return (
@@ -1304,7 +1338,7 @@ function SummaryTable({ scoped, yearMult, currencyLabel, bare = false }) {
           <thead>
             <tr className="bg-slate-200 text-[11px] font-bold uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-200">
               <th className="sticky left-0 z-10 bg-slate-200 px-4 py-2 text-left dark:bg-slate-700 w-[280px] min-w-[280px]">
-                Budget Elements
+                {labelHeader}
               </th>
               {SUMMARY_COLS.map((c) => {
                 const color = COL_TEXT_CLS[c.key] || (c.strong ? "text-brand-700 dark:text-brand-300" : "");
