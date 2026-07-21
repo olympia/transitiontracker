@@ -1049,14 +1049,14 @@ function itemAgg(it, cutoff, mults) {
   return a;
 }
 
-// row label for a WBS leg in the by-WBS summary: "code · name" (falling back
-// to whichever of code/name is present). Same code+name across years merge
-// into one row, so the Overall tab shows a true per-WBS total across years.
+// row label for a WBS leg in the by-WBS summary: "code · category" (falling
+// back to whichever of code/category is present). Same code+category across
+// years merge into one row, so the Overall tab shows a true per-WBS total.
 function wbsLabel(leg) {
   const code = (leg.code || "").trim();
-  const name = (leg.name || "").trim();
-  if (code && name) return `${code} · ${name}`;
-  return code || name || "Uncategorized WBS";
+  const cat = (leg.category || "").trim();
+  if (code && cat) return `${code} · ${cat}`;
+  return code || cat || "Uncategorized WBS";
 }
 
 // pure aggregation: scoped year-data + a currency multiplier -> grouped rows
