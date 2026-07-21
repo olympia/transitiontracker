@@ -951,7 +951,7 @@ const SUMMARY_COLS = [
   { key: "actual", label: "Actual" },
   { key: "commitment", label: "Commitment" },
   { key: "forecast", label: "Planned" },
-  { key: "actfc", label: "Total Forecast" },
+  { key: "actfc", label: "Forecast" },
   { key: "saving", label: "Saving" },
   { key: "carry", label: "Carry Over" },
 ];
@@ -1138,8 +1138,8 @@ const XLSX_COLS = [
   { key: "modified", label: "Modified Budget", rate: "default", strong: true },
   { key: "actual", label: "Actual", rate: "actual" },
   { key: "commitment", label: "Commitment", rate: "commit" },
-  { key: "forecast", label: "Forecast", rate: "forecast" },
-  { key: "actfc", label: "Total Forecast", rate: "sum" },
+  { key: "forecast", label: "Planned", rate: "forecast" },
+  { key: "actfc", label: "Forecast", rate: "sum" },
   { key: "saving", label: "Saving", rate: "saving" },
   { key: "carry", label: "Carry Over", rate: "default" },
 ];
