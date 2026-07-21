@@ -1490,10 +1490,10 @@ function BudgetOverview({ scoped, yearMult }) {
     return () => ro.disconnect();
   }, []);
 
-  const NUM = "px-4 py-2 text-right tabular-nums whitespace-nowrap";
+  const NUM = "px-4 py-1 text-right tabular-nums whitespace-nowrap";
   const bodyRow = (label, a, key) => (
     <tr key={key} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-      <td className="px-4 py-2 text-[13px]">{label}</td>
+      <td className="px-4 py-1 text-[13px]">{label}</td>
       <td className={`${NUM} bg-amber-50/70 dark:bg-amber-500/[0.06]`}>{fmt(a.modified)}</td>
       <td className={`${NUM} bg-amber-100/60 dark:bg-amber-500/[0.12]`}>{fmt(a.actual)}</td>
       <td className={`${NUM} bg-sky-50/70 dark:bg-sky-500/[0.08]`}>{fmt(a.commitment)}</td>
@@ -1503,22 +1503,22 @@ function BudgetOverview({ scoped, yearMult }) {
 
   return (
     <div className="space-y-5">
-      <div ref={tableRef} className="card w-fit max-w-full overflow-hidden">
+      <div ref={tableRef} className="card w-[1180px] max-w-full overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="text-sm">
+          <table className="w-full text-sm">
             <thead>
               <tr className="bg-teal-800 text-[13px] font-bold text-white dark:bg-teal-900">
-                <th className="px-4 py-3 text-left">WBS / Cost category</th>
-                <th className="px-4 py-3 text-right">Approved Budget</th>
-                <th className="px-4 py-3 text-right">Actual</th>
-                <th className="px-4 py-3 text-right">Committed</th>
-                <th className="px-4 py-3 text-right">Available</th>
+                <th className="px-4 py-1.5 text-left">WBS / Cost category</th>
+                <th className="px-4 py-1.5 text-right">Approved Budget</th>
+                <th className="px-4 py-1.5 text-right">Actual</th>
+                <th className="px-4 py-1.5 text-right">Committed</th>
+                <th className="px-4 py-1.5 text-right">Available</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => bodyRow(r.label, r.agg, r.label))}
               <tr className="border-t-2 border-teal-200 bg-teal-50 text-[13px] font-extrabold text-teal-900 dark:border-teal-700 dark:bg-teal-900/30 dark:text-teal-100">
-                <td className="px-4 py-2.5">TOTAL</td>
+                <td className="px-4 py-1.5">TOTAL</td>
                 <td className={NUM}>{fmt(total.modified)}</td>
                 <td className={NUM}>{fmt(total.actual)}</td>
                 <td className={NUM}>{fmt(total.commitment)}</td>
@@ -1533,13 +1533,13 @@ function BudgetOverview({ scoped, yearMult }) {
         className="grid grid-cols-2 gap-4"
         style={{ width: tableW ? tableW / 2 : undefined }}
       >
-        <div className="rounded-lg bg-yellow-400 px-3 py-4 text-center text-black">
+        <div className="rounded-lg bg-yellow-400 px-3 py-2 text-center text-black">
           <div className="text-sm font-bold leading-tight">Budget utilization Actual</div>
-          <div className="mt-1 text-2xl font-extrabold">{actPct === null ? "—" : `${actPct}%`}</div>
+          <div className="mt-0.5 text-xl font-extrabold">{actPct === null ? "—" : `${actPct}%`}</div>
         </div>
-        <div className="rounded-lg bg-green-500 px-3 py-4 text-center text-black">
+        <div className="rounded-lg bg-green-500 px-3 py-2 text-center text-black">
           <div className="text-sm font-bold leading-tight">Budget utilization Actual + committed</div>
-          <div className="mt-1 text-2xl font-extrabold">{acPct === null ? "—" : `${acPct}%`}</div>
+          <div className="mt-0.5 text-xl font-extrabold">{acPct === null ? "—" : `${acPct}%`}</div>
         </div>
       </div>
     </div>
