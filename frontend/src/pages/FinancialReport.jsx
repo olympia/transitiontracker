@@ -313,19 +313,6 @@ export default function FinancialReport({ project }) {
 
       <section>
         <div className="mb-1 flex items-center gap-2">
-          <Table2 size={18} className="text-brand-600" />
-          <h2 className="text-lg font-extrabold">Budget overview</h2>
-        </div>
-        <p className="mb-4 text-sm text-slate-500">
-          Approved (Modified) budget vs. Actual / Committed per WBS leg
-          {curSel === "overall" ? " (all years)" : ` (${curSel})`}, in {cur}. Available =
-          Approved &minus; Actual &minus; Committed.
-        </p>
-        <BudgetOverview scoped={scoped} yearMult={yearMult} currencyLabel={cur} />
-      </section>
-
-      <section>
-        <div className="mb-1 flex items-center gap-2">
           <TrendingUp size={18} className="text-brand-600" />
           <h2 className="text-lg font-extrabold">Project Budget Forecast</h2>
         </div>
@@ -463,6 +450,18 @@ function PortfolioReview({ scoped, codes, nowYear }) {
       </section>
 
       <UtilChipsRow pct={pct} />
+
+      <section>
+        <div className="mb-1 flex items-center gap-2">
+          <Table2 size={18} className="text-brand-600" />
+          <h2 className="text-lg font-extrabold">Budget overview</h2>
+        </div>
+        <p className="mb-4 text-sm text-slate-500">
+          Approved (Modified) budget vs. Actual / Committed per WBS leg, in {codes.base}.
+          Available = Approved &minus; Actual &minus; Committed.
+        </p>
+        <BudgetOverview scoped={scoped} yearMult={baseMult} />
+      </section>
     </div>
   );
 }
@@ -1491,9 +1490,9 @@ function BudgetOverview({ scoped, yearMult }) {
 
   return (
     <div className="space-y-5">
-      <div className="card overflow-hidden">
+      <div className="card w-fit max-w-full overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="text-sm">
             <thead>
               <tr className="bg-teal-800 text-[13px] font-bold text-white dark:bg-teal-900">
                 <th className="px-4 py-3 text-left">WBS / Cost category</th>
