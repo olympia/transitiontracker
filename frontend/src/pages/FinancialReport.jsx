@@ -384,7 +384,7 @@ function UtilChipsRow({ pct }) {
         bg="bg-emerald-400"
       />
       <UtilChip
-        label="Budget Utilization (Actual + Commitment + Forecast)"
+        label="Budget Utilization (Actual + Commitment + Planned)"
         pct={pct.totalForecast}
         bg="bg-sky-200"
       />
@@ -861,7 +861,7 @@ function Doughnut({ actual, obligo, open, base }) {
   const segs = [
     { label: "Actual", value: actual, cls: "fill-emerald-500" },
     { label: "Obligo (PO)", value: obligo, cls: "fill-sky-500" },
-    { label: "Open forecast", value: open, cls: "fill-slate-400" },
+    { label: "Planned", value: open, cls: "fill-slate-400" },
   ];
   const cx = 90;
   const cy = 90;
@@ -904,7 +904,7 @@ function UtilBars({ actual, obligo, open, budget }) {
   const rows = [
     { label: "Actual", used: actual / b },
     { label: "Actual + Obligo", used: (actual + obligo) / b },
-    { label: "Actual + Obligo + Open", used: (actual + obligo + open) / b },
+    { label: "Actual + Obligo + Planned", used: (actual + obligo + open) / b },
     { label: "Potential to cancel", used: 1 - (actual + obligo + open) / b, invert: true },
   ];
   return (
@@ -950,7 +950,7 @@ const SUMMARY_COLS = [
   { key: "modified", label: "Modified Budget", strong: true },
   { key: "actual", label: "Actual" },
   { key: "commitment", label: "Commitment" },
-  { key: "forecast", label: "Forecast" },
+  { key: "forecast", label: "Planned" },
   { key: "actfc", label: "Total Forecast" },
   { key: "saving", label: "Saving" },
   { key: "carry", label: "Carry Over" },
