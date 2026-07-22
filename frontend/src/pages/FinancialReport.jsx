@@ -1538,17 +1538,17 @@ function BudgetOverview({ scoped, yearMult }) {
         className="grid grid-cols-3 gap-2"
         style={{ width: tableW ? tableW / 2 : undefined }}
       >
-        <div className="rounded-lg bg-yellow-400 px-2 py-2 text-center text-black">
+        <div className="flex h-full flex-col rounded-lg bg-yellow-400 px-2 py-2 text-center text-black">
           <div className="text-xs font-bold leading-tight">Budget utilization Actual</div>
-          <div className="mt-0.5 text-xl font-extrabold">{actPct === null ? "—" : `${actPct}%`}</div>
+          <div className="mt-auto pt-0.5 text-xl font-extrabold">{actPct === null ? "—" : `${actPct}%`}</div>
         </div>
-        <div className="rounded-lg bg-green-500 px-2 py-2 text-center text-black">
+        <div className="flex h-full flex-col rounded-lg bg-green-500 px-2 py-2 text-center text-black">
           <div className="text-xs font-bold leading-tight">Budget utilization Actual + committed</div>
-          <div className="mt-0.5 text-xl font-extrabold">{acPct === null ? "—" : `${acPct}%`}</div>
+          <div className="mt-auto pt-0.5 text-xl font-extrabold">{acPct === null ? "—" : `${acPct}%`}</div>
         </div>
-        <div className="rounded-lg bg-sky-300 px-2 py-2 text-center text-black">
+        <div className="flex h-full flex-col rounded-lg bg-sky-300 px-2 py-2 text-center text-black">
           <div className="text-xs font-bold leading-tight">Budget utilization Actual + committed + planned</div>
-          <div className="mt-0.5 text-xl font-extrabold">{apPct === null ? "—" : `${apPct}%`}</div>
+          <div className="mt-auto pt-0.5 text-xl font-extrabold">{apPct === null ? "—" : `${apPct}%`}</div>
         </div>
       </div>
     </div>
