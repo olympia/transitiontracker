@@ -1476,6 +1476,7 @@ function BudgetOverview({ scoped, yearMult }) {
   const pctOf = (v) => (total.modified > 0 ? Math.round((v / total.modified) * 100) : null);
   const actPct = pctOf(total.actual);
   const acPct = pctOf(total.actual + total.commitment);
+  const apPct = pctOf(total.actfc); // actual + commitment + planned(forecast)
 
   // measure the table's rendered width so the two chips together span exactly
   // half of it (the chips row width = tableW/2, split into two equal columns)
@@ -1497,6 +1498,7 @@ function BudgetOverview({ scoped, yearMult }) {
       <td className={`${NUM} bg-amber-50/70 dark:bg-amber-500/[0.06]`}>{fmt(a.modified)}</td>
       <td className={`${NUM} bg-amber-100/60 dark:bg-amber-500/[0.12]`}>{fmt(a.actual)}</td>
       <td className={`${NUM} bg-sky-50/70 dark:bg-sky-500/[0.08]`}>{fmt(a.commitment)}</td>
+      <td className={`${NUM} bg-orange-50/70 dark:bg-orange-500/[0.08]`}>{fmt(a.forecast)}</td>
       <td className={`${NUM} bg-emerald-50/70 dark:bg-emerald-500/[0.07]`}>{fmt(avail(a))}</td>
     </tr>
   );
@@ -1512,6 +1514,7 @@ function BudgetOverview({ scoped, yearMult }) {
                 <th className="px-4 py-1.5 text-right">Approved Budget</th>
                 <th className="px-4 py-1.5 text-right">Actual</th>
                 <th className="px-4 py-1.5 text-right">Committed</th>
+                <th className="px-4 py-1.5 text-right">Planned</th>
                 <th className="px-4 py-1.5 text-right">Available</th>
               </tr>
             </thead>
@@ -1522,6 +1525,7 @@ function BudgetOverview({ scoped, yearMult }) {
                 <td className={NUM}>{fmt(total.modified)}</td>
                 <td className={NUM}>{fmt(total.actual)}</td>
                 <td className={NUM}>{fmt(total.commitment)}</td>
+                <td className={NUM}>{fmt(total.forecast)}</td>
                 <td className={NUM}>{fmt(avail(total))}</td>
               </tr>
             </tbody>
@@ -1530,16 +1534,20 @@ function BudgetOverview({ scoped, yearMult }) {
       </div>
 
       <div
-        className="grid grid-cols-2 gap-4"
+        className="grid grid-cols-3 gap-2"
         style={{ width: tableW ? tableW / 2 : undefined }}
       >
-        <div className="rounded-lg bg-yellow-400 px-3 py-2 text-center text-black">
-          <div className="text-sm font-bold leading-tight">Budget utilization Actual</div>
+        <div className="rounded-lg bg-yellow-400 px-2 py-2 text-center text-black">
+          <div className="text-xs font-bold leading-tight">Budget utilization Actual</div>
           <div className="mt-0.5 text-xl font-extrabold">{actPct === null ? "—" : `${actPct}%`}</div>
         </div>
-        <div className="rounded-lg bg-green-500 px-3 py-2 text-center text-black">
-          <div className="text-sm font-bold leading-tight">Budget utilization Actual + committed</div>
+        <div className="rounded-lg bg-green-500 px-2 py-2 text-center text-black">
+          <div className="text-xs font-bold leading-tight">Budget utilization Actual + committed</div>
           <div className="mt-0.5 text-xl font-extrabold">{acPct === null ? "—" : `${acPct}%`}</div>
+        </div>
+        <div className="rounded-lg bg-sky-300 px-2 py-2 text-center text-black">
+          <div className="text-xs font-bold leading-tight">Budget utilization Actual + committed + planned</div>
+          <div className="mt-0.5 text-xl font-extrabold">{apPct === null ? "—" : `${apPct}%`}</div>
         </div>
       </div>
     </div>
