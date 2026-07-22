@@ -453,8 +453,15 @@ function PortfolioReview({ scoped, codes, nowYear }) {
       <UtilChipsRow pct={pct} />
 
       <section>
-        <h2 className="mb-2 text-lg font-extrabold">Budget overview</h2>
-        <BudgetOverview scoped={scoped} yearMult={baseMult} />
+        <h2 className="mb-2 text-lg font-extrabold">Budget overview (USD - using budgeting FX Rate)</h2>
+        {usdReady ? (
+          <BudgetOverview scoped={scoped} yearMult={usdMult} />
+        ) : (
+          <div className="rounded-lg bg-amber-50 px-4 py-6 text-center text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+            No USD rate configured for {nowYear}. Set USD as a reporting currency (with a rate) for
+            this project in Budget Details &rarr; Setup to see this table.
+          </div>
+        )}
       </section>
     </div>
   );
