@@ -1466,21 +1466,12 @@ function BudgetOverview({ scoped, yearMult }) {
     () => buildSummary(scoped, yearMult, "wbs"),
     [scoped, yearMult]
   );
-  if (rows.length === 0)
-    return (
-      <div className="card px-4 py-6 text-center text-sm text-slate-400">
-        No budget elements to summarize.
-      </div>
-    );
 
   const avail = (a) => a.modified - a.actual - a.commitment;
-  const pctOf = (v) => (total.modified > 0 ? Math.round((v / total.modified) * 100) : null);
-  const actPct = pctOf(total.actual);
-  const acPct = pctOf(total.actual + total.commitment);
-  const apPct = pctOf(total.actfc); // actual + commitment + planned(forecast)
 
-  // measure the table's rendered width so the two chips together span exactly
-  // half of it (the chips row width = tableW/2, split into two equal columns)
+  // measure the table's rendered width so the three chips together span exactly
+  // half of it (the chips row width = tableW/2, split into three equal columns).
+  // NOTE: all hooks must stay above the early return below (rules of hooks).
   const tableRef = useRef(null);
   const [tableW, setTableW] = useState(0);
   useEffect(() => {
@@ -1491,6 +1482,30 @@ function BudgetOverview({ scoped, yearMult }) {
     setTableW(el.offsetWidth);
     return () => ro.disconnect();
   }, []);
+
+  // hide WBS rows that are all-zero across every displayed column
+  const visibleRows = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          ![r.agg.modified, r.agg.actual, r.agg.commitment, avail(r.agg), r.agg.forecast].every(
+            (v) => Math.round(v) === 0
+          )
+      ),
+    [rows]
+  );
+
+  if (visibleRows.length === 0)
+    return (
+      <div className="card px-4 py-6 text-center text-sm text-slate-400">
+        No budget elements to summarize.
+      </div>
+    );
+
+  const pctOf = (v) => (total.modified > 0 ? Math.round((v / total.modified) * 100) : null);
+  const actPct = pctOf(total.actual);
+  const acPct = pctOf(total.actual + total.commitment);
+  const apPct = pctOf(total.actfc); // actual + commitment + planned(forecast)
 
   const NUM = "px-4 py-1 text-right tabular-nums whitespace-nowrap";
   const bodyRow = (label, a, key) => (
@@ -1520,7 +1535,7 @@ function BudgetOverview({ scoped, yearMult }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => bodyRow(r.label, r.agg, r.label))}
+              {visibleRows.map((r) => bodyRow(r.label, r.agg, r.label))}
               <tr className="border-t-2 border-teal-200 bg-teal-50 text-[13px] font-extrabold text-teal-900 dark:border-teal-700 dark:bg-teal-900/30 dark:text-teal-100">
                 <td className="px-4 py-1.5">TOTAL</td>
                 <td className={NUM}>{fmt(total.modified)}</td>
