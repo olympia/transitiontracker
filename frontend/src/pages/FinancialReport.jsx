@@ -418,6 +418,7 @@ function useProjectUsdRate(scoped, codes) {
 // Summary table in base currency directly above the same table in USD
 // (tight, for PPT copy-paste), then 3 utilization chips below.
 function PortfolioReview({ scoped, codes, nowYear }) {
+  const isDark = useIsDark();
   const baseMult = useMemo(() => () => 1, []);
   const { rate: usdRate, ready: usdReady } = useProjectUsdRate(scoped, codes);
   const usdMult = useMemo(() => () => (usdRate > 0 ? 1 / usdRate : 0), [usdRate]);
@@ -427,7 +428,7 @@ function PortfolioReview({ scoped, codes, nowYear }) {
   const pct = utilPct(total);
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${isDark ? "" : "rounded-xl bg-white p-6 text-slate-900"}`}>
       <section>
         <div className="mb-1 flex items-center gap-2">
           <Table2 size={18} className="text-brand-600" />
@@ -452,14 +453,7 @@ function PortfolioReview({ scoped, codes, nowYear }) {
       <UtilChipsRow pct={pct} />
 
       <section>
-        <div className="mb-1 flex items-center gap-2">
-          <Table2 size={18} className="text-brand-600" />
-          <h2 className="text-lg font-extrabold">Budget overview</h2>
-        </div>
-        <p className="mb-4 text-sm text-slate-500">
-          Approved (Modified) budget vs. Actual / Committed per WBS leg, in {codes.base}.
-          Available = Approved &minus; Actual &minus; Committed.
-        </p>
+        <h2 className="mb-2 text-lg font-extrabold">Budget overview</h2>
         <BudgetOverview scoped={scoped} yearMult={baseMult} />
       </section>
     </div>
