@@ -1498,8 +1498,8 @@ function BudgetOverview({ scoped, yearMult }) {
       <td className={`${NUM} bg-amber-50/70 dark:bg-amber-500/[0.06]`}>{fmt(a.modified)}</td>
       <td className={`${NUM} bg-amber-100/60 dark:bg-amber-500/[0.12]`}>{fmt(a.actual)}</td>
       <td className={`${NUM} bg-sky-50/70 dark:bg-sky-500/[0.08]`}>{fmt(a.commitment)}</td>
-      <td className={`${NUM} bg-orange-50/70 dark:bg-orange-500/[0.08]`}>{fmt(a.forecast)}</td>
       <td className={`${NUM} bg-emerald-50/70 dark:bg-emerald-500/[0.07]`}>{fmt(avail(a))}</td>
+      <td className={`${NUM} bg-orange-50/70 dark:bg-orange-500/[0.08]`}>{fmt(a.forecast)}</td>
     </tr>
   );
 
@@ -1514,8 +1514,8 @@ function BudgetOverview({ scoped, yearMult }) {
                 <th className="px-4 py-1.5 text-right">Approved Budget</th>
                 <th className="px-4 py-1.5 text-right">Actual</th>
                 <th className="px-4 py-1.5 text-right">Committed</th>
-                <th className="px-4 py-1.5 text-right">Planned</th>
                 <th className="px-4 py-1.5 text-right">Available</th>
+                <th className="px-4 py-1.5 text-right">Planned</th>
               </tr>
             </thead>
             <tbody>
@@ -1525,8 +1525,8 @@ function BudgetOverview({ scoped, yearMult }) {
                 <td className={NUM}>{fmt(total.modified)}</td>
                 <td className={NUM}>{fmt(total.actual)}</td>
                 <td className={NUM}>{fmt(total.commitment)}</td>
-                <td className={NUM}>{fmt(total.forecast)}</td>
                 <td className={NUM}>{fmt(avail(total))}</td>
+                <td className={NUM}>{fmt(total.forecast)}</td>
               </tr>
             </tbody>
           </table>
