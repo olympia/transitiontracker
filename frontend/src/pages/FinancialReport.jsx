@@ -1462,9 +1462,24 @@ function SummaryTable({ scoped, yearMult, currencyLabel, bare = false, groupBy =
 // total Approved budget). Follows the selected year + currency like the tables
 // above (same buildSummary("wbs") source, so rows match the by-WBS summary).
 function BudgetOverview({ scoped, yearMult }) {
+  // exclude WBS legs whose code ends in "/95" or whose category name contains
+  // "OPEX" (case-insensitive) from this table only (rows + TOTAL + chips)
+  const filteredScoped = useMemo(
+    () =>
+      scoped.map((yd) => ({
+        ...yd,
+        legs: yd.legs.filter((leg) => {
+          const code = (leg.code || "").trim();
+          const cat = (leg.category || "").toLowerCase();
+          return !(code.endsWith("/95") || cat.includes("opex"));
+        }),
+      })),
+    [scoped]
+  );
+
   const { rows, total } = useMemo(
-    () => buildSummary(scoped, yearMult, "wbs"),
-    [scoped, yearMult]
+    () => buildSummary(filteredScoped, yearMult, "wbs"),
+    [filteredScoped, yearMult]
   );
 
   const avail = (a) => a.modified - a.actual - a.commitment;
