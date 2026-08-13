@@ -1709,7 +1709,7 @@ function YearRow({ year, rep1, rep2, onChanged }) {
       </label>
       <label className="flex items-center gap-1.5 text-xs text-slate-500">
         FC from
-        <select className="input h-8 w-28" value={cut}
+        <select className="input h-8 w-auto py-0 pl-2 pr-7 leading-none" value={cut}
           onChange={(e) => { setCut(e.target.value); setDirty(true); }}>
           {MONTHS.map((mn, idx) => (
             <option key={mn} value={idx + 1}>{mn}</option>
