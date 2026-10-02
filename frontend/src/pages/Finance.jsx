@@ -10,6 +10,7 @@ import {
   Coins,
   Copy,
   FileSpreadsheet,
+  GripVertical,
 } from "lucide-react";
 import { api } from "../api";
 import { Spinner, EmptyState, Modal, Field, Toggle } from "../components/ui.jsx";
@@ -104,7 +105,29 @@ function sumAgg(list) {
   );
 }
 
-export default function Finance({ project, onProjectChange }) {
+// drag & drop reordering (edit mode). A custom MIME type so that a drop on a
+// text input never pastes anything into a money cell.
+const DND_MIME = "application/x-tt-reorder";
+const DROP_BEFORE = "[&>td]:shadow-[inset_0_2px_0_0_theme(colors.brand.500)]";
+const DROP_AFTER = "[&>td]:shadow-[inset_0_-2px_0_0_theme(colors.brand.500)]";
+
+// true if the pointer is in the lower half of the element under it
+function dropAfter(e) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  return e.clientY > rect.top + rect.height / 2;
+}
+
+// move dragId before/after targetId inside ids; null if nothing changes
+function moveId(ids, dragId, targetId, after) {
+  if (dragId === targetId) return null;
+  const rest = ids.filter((id) => id !== dragId);
+  const idx = rest.indexOf(targetId);
+  if (idx < 0) return null;
+  rest.splice(idx + (after ? 1 : 0), 0, dragId);
+  return rest.every((id, i) => id === ids[i]) ? null : rest;
+}
+
+export default function Finance({ project, onProjectChange, editMode = false, onEditAvailChange }) {
   const [years, setYears] = useState(null);
   const [categories, setCategories] = useState([]);
   const [yearId, setYearId] = useState(null);
@@ -192,6 +215,12 @@ export default function Finance({ project, onProjectChange }) {
   const curFactor =
     cur === codes.base ? 1 : cur === codes.rep1 ? rates.r1 : cur === codes.rep2 ? rates.r2 : 1;
   const isBaseCur = cur === codes.base;
+  // reordering is only offered in the editable base-currency view; the header
+  // gear (App.jsx) is hidden while a reporting currency is shown
+  const reorder = editMode && isBaseCur;
+  useEffect(() => {
+    if (onEditAvailChange) onEditAvailChange(isBaseCur);
+  }, [isBaseCur, onEditAvailChange]);
 
   // one Item-column width for ALL legs (fits the longest item) so the aggregate
   // and month columns line up across WBS leg cards
@@ -232,9 +261,9 @@ export default function Finance({ project, onProjectChange }) {
     ctx.font = `500 14px ${FNAME}`;
     setLS("0");
     max = Math.max(max, ctx.measureText("TOTAL with CRs").width);
-    // + cell padding (px-4 = 32) and a small buffer
-    return Math.min(Math.max(Math.round(max) + 36, 168), 560);
-  }, [data, fontReady, cur]);
+    // + cell padding (px-4 = 32) and a small buffer (+ the drag handle in edit mode)
+    return Math.min(Math.max(Math.round(max) + 36 + (reorder ? 20 : 0), 168), 560);
+  }, [data, fontReady, cur, reorder]);
 
   useEffect(() => {
     if (cur) localStorage.setItem("tt-fin-cur", cur);
@@ -295,6 +324,56 @@ export default function Finance({ project, onProjectChange }) {
             }
           }
       return nd;
+    });
+  }
+
+  // persist a new row order inside a leg: regular items first, then CR rows,
+  // renumbered 1..n; only rows whose position actually changed are saved
+  function reorderItems(legId, isCr, orderedIds) {
+    const leg = data?.legs.find((l) => l.id === legId);
+    if (!leg) return;
+    const byId = new Map(leg.items.map((it) => [it.id, it]));
+    const section = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+    const regular = isCr ? leg.items.filter((it) => !it.is_cr) : section;
+    const crs = isCr ? section : leg.items.filter((it) => it.is_cr);
+    const order = [...regular, ...crs].map((it) => it.id);
+    const changed = order
+      .map((id, i) => ({ id, position: i + 1 }))
+      .filter((x) => byId.get(x.id).position !== x.position);
+    setData((d) => {
+      if (!d) return d;
+      const nd = structuredClone(d);
+      const l = nd.legs.find((x) => x.id === legId);
+      if (l) {
+        const cur = new Map(l.items.map((it) => [it.id, it]));
+        l.items = order.filter((id) => cur.has(id)).map((id, i) => ({ ...cur.get(id), position: i + 1 }));
+      }
+      return nd;
+    });
+    Promise.all(changed.map((x) => api.updateItem(x.id, { position: x.position }))).catch((e) => {
+      console.error("Reorder failed", e);
+      loadView();
+    });
+  }
+
+  // persist a new order of the WBS legs of the current year
+  function reorderLegs(orderedIds) {
+    if (!data) return;
+    const byId = new Map(data.legs.map((l) => [l.id, l]));
+    const order = orderedIds.filter((id) => byId.has(id));
+    const changed = order
+      .map((id, i) => ({ id, position: i + 1 }))
+      .filter((x) => byId.get(x.id).position !== x.position);
+    setData((d) => {
+      if (!d) return d;
+      const nd = structuredClone(d);
+      const cur = new Map(nd.legs.map((l) => [l.id, l]));
+      nd.legs = order.filter((id) => cur.has(id)).map((id, i) => ({ ...cur.get(id), position: i + 1 }));
+      return nd;
+    });
+    Promise.all(changed.map((x) => api.updateLeg(x.id, { position: x.position }))).catch((e) => {
+      console.error("Reorder failed", e);
+      loadView();
     });
   }
 
@@ -416,6 +495,9 @@ export default function Finance({ project, onProjectChange }) {
               mirror={mirrorPartner}
               setPo={setPo}
               reload={loadView}
+              reorder={reorder}
+              onReorderItems={reorderItems}
+              onReorderLegs={reorderLegs}
             />
           ) : null}
         </>
@@ -845,9 +927,45 @@ function YearGrid({
   mirror,
   setPo,
   reload,
+  reorder,
+  onReorderItems,
+  onReorderLegs,
 }) {
   // convert a base amount into the display currency (null if no rate)
   const conv = (b) => (curFactor ? b / curFactor : null);
+
+  // drag & drop reordering of the WBS leg cards (edit mode only)
+  const [dragLeg, setDragLeg] = useState(null); // id of the leg being dragged
+  const [overLeg, setOverLeg] = useState(null); // { id, after }
+  const endLegDrag = () => {
+    setDragLeg(null);
+    setOverLeg(null);
+  };
+  const legDnd = (leg) => ({
+    dragging: dragLeg === leg.id,
+    dropPos:
+      dragLeg !== null && dragLeg !== leg.id && overLeg && overLeg.id === leg.id
+        ? overLeg.after
+          ? "after"
+          : "before"
+        : null,
+    onDragStart: () => setDragLeg(leg.id),
+    onDragEnd: endLegDrag,
+    onDragOver: (e) => {
+      if (dragLeg === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const after = dropAfter(e);
+      setOverLeg((o) => (o && o.id === leg.id && o.after === after ? o : { id: leg.id, after }));
+    },
+    onDrop: (e) => {
+      if (dragLeg === null) return;
+      e.preventDefault();
+      const ids = moveId(data.legs.map((l) => l.id), dragLeg, leg.id, dropAfter(e));
+      if (ids) onReorderLegs(ids);
+      endLegDrag();
+    },
+  });
 
   // keep all WBS blocks horizontally scrolled in sync
   const scrollers = useRef([]);
@@ -963,6 +1081,9 @@ function YearGrid({
               saveMonth={saveMonth}
               mirror={mirror}
               setPo={setPo}
+              reorder={reorder}
+              onReorderItems={(isCr, ids) => onReorderItems(leg.id, isCr, ids)}
+              legDnd={reorder ? legDnd(leg) : null}
               scrollRef={registerScroller}
               onScroll={onBlockScroll}
             />
@@ -1075,6 +1196,9 @@ function LegCard({
   saveMonth,
   mirror,
   setPo,
+  reorder,
+  onReorderItems,
+  legDnd,
   scrollRef,
   onScroll,
 }) {
@@ -1085,6 +1209,45 @@ function LegCard({
   const crAggs = crs.map((it) => aggItem(it, cutoff));
   const budgetAgg = sumAgg(regAggs);
   const withCrsAgg = sumAgg([...regAggs, ...crAggs]);
+
+  // drag & drop reordering of rows, only inside their own section
+  // (regular items among themselves, CR rows among themselves)
+  const [dragItem, setDragItem] = useState(null); // { id, isCr }
+  const [overItem, setOverItem] = useState(null); // { id, after }
+  const endItemDrag = () => {
+    setDragItem(null);
+    setOverItem(null);
+  };
+  const rowDnd = (it) => {
+    if (!reorder) return null;
+    const isCr = !!it.is_cr;
+    const active = dragItem !== null && dragItem.isCr === isCr;
+    return {
+      dragging: dragItem !== null && dragItem.id === it.id,
+      dropPos:
+        active && dragItem.id !== it.id && overItem && overItem.id === it.id
+          ? overItem.after
+            ? "after"
+            : "before"
+          : null,
+      onDragStart: () => setDragItem({ id: it.id, isCr }),
+      onDragEnd: endItemDrag,
+      onDragOver: (e) => {
+        if (!active) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const after = dropAfter(e);
+        setOverItem((o) => (o && o.id === it.id && o.after === after ? o : { id: it.id, after }));
+      },
+      onDrop: (e) => {
+        if (!active) return;
+        e.preventDefault();
+        const ids = moveId((isCr ? crs : regular).map((x) => x.id), dragItem.id, it.id, dropAfter(e));
+        if (ids) onReorderItems(isCr, ids);
+        endItemDrag();
+      },
+    };
+  };
   // per-month totals (base currency) for a given list of items
   const monthTot = (list) =>
     MONTHS.map((_, idx) => {
@@ -1104,8 +1267,35 @@ function LegCard({
   const withCrsMonths = monthTot([...regular, ...crs]);
 
   return (
-    <div className="card overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 bg-slate-800 px-4 py-3 dark:bg-slate-600">
+    <div
+      className={`card overflow-hidden ${legDnd?.dragging ? "opacity-50" : ""} ${
+        legDnd?.dropPos === "before"
+          ? "shadow-[0_-4px_0_0_theme(colors.brand.500)]"
+          : legDnd?.dropPos === "after"
+          ? "shadow-[0_4px_0_0_theme(colors.brand.500)]"
+          : ""
+      }`}
+      onDragOver={legDnd?.onDragOver}
+      onDrop={legDnd?.onDrop}
+    >
+      <div data-leg-band className="flex flex-wrap items-center gap-3 bg-slate-800 px-4 py-3 dark:bg-slate-600">
+        {legDnd && (
+          <span
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData(DND_MIME, String(leg.id));
+              const band = e.currentTarget.closest("[data-leg-band]");
+              if (band) e.dataTransfer.setDragImage(band, 16, 16);
+              legDnd.onDragStart();
+            }}
+            onDragEnd={legDnd.onDragEnd}
+            title="Drag to reorder WBS legs"
+            className="-ml-1.5 flex cursor-grab items-center text-slate-400 hover:text-white active:cursor-grabbing"
+          >
+            <GripVertical size={18} />
+          </span>
+        )}
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[15px] font-extrabold text-white">{leg.code || "—"}</span>
@@ -1201,6 +1391,7 @@ function LegCard({
                 mirror={mirror}
                 setPo={setPo}
                 cutoff={cutoff}
+                dnd={rowDnd(it)}
               />
             ))}
             <TotalRow label="TOTAL" agg={budgetAgg} monthTotals={budgetMonths} conv={conv} />
@@ -1219,6 +1410,7 @@ function LegCard({
                 mirror={mirror}
                 setPo={setPo}
                 cutoff={cutoff}
+                dnd={rowDnd(it)}
               />
             ))}
             {crs.length > 0 && (
@@ -1330,7 +1522,7 @@ function GrandTotalCard({ legs, cutoff, conv, itemColW, scrollRef, onScroll }) {
 }
 
 // one row in the grid — used for both regular budget items and CR rows
-function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, saveMonth, mirror, setPo, cutoff }) {
+function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, saveMonth, mirror, setPo, cutoff, dnd }) {
   const a = agg;
   const cz = (v) => (v === 0 ? "" : fmt(conv(v)));
   // a reallocation only moves budget, so its actual/forecast cells are locked
@@ -1341,11 +1533,34 @@ function ItemRow({ it, agg, cur, conv, isBaseCur, onEdit, onDelete, patchMonth, 
     if (it.partner_item_id && mirror) mirror(it.partner_item_id, m.month, field, -num(v));
   };
   return (
-    <tr className="group hover:bg-slate-100 dark:hover:bg-slate-800">
+    <tr
+      className={`group hover:bg-slate-100 dark:hover:bg-slate-800 ${dnd?.dragging ? "opacity-40" : ""} ${
+        dnd?.dropPos === "before" ? DROP_BEFORE : dnd?.dropPos === "after" ? DROP_AFTER : ""
+      }`}
+      onDragOver={dnd?.onDragOver}
+      onDrop={dnd?.onDrop}
+    >
       <td
         style={{ width: "var(--item-w)", minWidth: "var(--item-w)", maxWidth: "var(--item-w)" }}
         className="sticky left-0 z-10 overflow-hidden text-ellipsis whitespace-nowrap bg-white px-4 py-1 text-[13px] font-light tracking-tight text-slate-400 dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-800"
       >
+        {dnd && (
+          <span
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData(DND_MIME, String(it.id));
+              const cell = e.currentTarget.closest("td");
+              if (cell) e.dataTransfer.setDragImage(cell, 12, 12);
+              dnd.onDragStart();
+            }}
+            onDragEnd={dnd.onDragEnd}
+            title="Drag to reorder"
+            className="-ml-2 mr-1 inline-flex cursor-grab align-middle text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-300"
+          >
+            <GripVertical size={14} />
+          </span>
+        )}
         {it.is_cr && (
           <span className="mr-2 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             {CR_KINDS.find((k) => k.id === it.cr_kind)?.label || "CR"}

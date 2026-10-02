@@ -9,6 +9,7 @@ import {
   Sun,
   ChevronDown,
   Plus,
+  Settings,
 } from "lucide-react";
 import { api } from "./api";
 import { Spinner, Modal, Field } from "./components/ui.jsx";
@@ -63,6 +64,10 @@ export default function App() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [drill, setDrill] = useState(null);
+  // edit mode (row / WBS leg reordering on Budget Details); in-memory only,
+  // so a page reload always starts with it switched off
+  const [editMode, setEditMode] = useState(false);
+  const [editAvail, setEditAvail] = useState(false);
 
   function selectMain(id) {
     setMainTab(id);
@@ -175,6 +180,24 @@ export default function App() {
           </div>
 
           <div className="ml-auto flex items-center gap-1">
+            {mainTab === "financial" && subTab === "budget" && editAvail && (
+              <button
+                className={`btn-ghost px-2.5 ${
+                  editMode
+                    ? "bg-brand-600 text-white hover:bg-brand-700 hover:text-white dark:bg-brand-600 dark:text-white dark:hover:bg-brand-700"
+                    : ""
+                }`}
+                onClick={() => setEditMode(!editMode)}
+                aria-pressed={editMode}
+                title={
+                  editMode
+                    ? "Edit mode is on: drag rows and WBS legs to reorder. Click to switch off."
+                    : "Edit mode: reorder rows and WBS legs"
+                }
+              >
+                <Settings size={18} />
+              </button>
+            )}
             <button
               className="btn-ghost px-2.5"
               onClick={() => setDark(!dark)}
@@ -264,7 +287,12 @@ export default function App() {
           subTab === "finreport" ? (
             <FinancialReport project={project} />
           ) : (
-            <Finance project={project} onProjectChange={loadProjects} />
+            <Finance
+              project={project}
+              onProjectChange={loadProjects}
+              editMode={editMode}
+              onEditAvailChange={setEditAvail}
+            />
           )
         ) : null}
       </main>
