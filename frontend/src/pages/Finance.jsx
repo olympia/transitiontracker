@@ -9,6 +9,7 @@ import {
   Layers,
   Coins,
   Copy,
+  FileSpreadsheet,
 } from "lucide-react";
 import { api } from "../api";
 import { Spinner, EmptyState, Modal, Field, Toggle } from "../components/ui.jsx";
@@ -116,6 +117,7 @@ export default function Finance({ project, onProjectChange }) {
     () => localStorage.getItem("tt-fin-cur") || ""
   );
   const [fontReady, setFontReady] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (document.fonts && document.fonts.ready) {
@@ -296,6 +298,20 @@ export default function Finance({ project, onProjectChange }) {
     });
   }
 
+  // snapshot of the current year view (as shown) into an .xlsx
+  async function handleExport() {
+    if (!data) return;
+    setExporting(true);
+    try {
+      await exportBudgetDetailsXlsx({ project, data, cutoff, cur, curFactor, isBaseCur, codes });
+    } catch (e) {
+      console.error("Excel export failed", e);
+      alert("Excel export failed: " + (e?.message || e));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (years === null) return <Spinner />;
 
   return (
@@ -366,6 +382,15 @@ export default function Finance({ project, onProjectChange }) {
                 {y.year}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={!data || loadingView || exporting}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-sm font-semibold text-slate-600 transition hover:bg-white hover:text-brand-600 disabled:opacity-50 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-900"
+            >
+              <FileSpreadsheet size={15} />
+              {exporting ? "Exporting…" : "Export to Excel"}
+            </button>
           </div>
 
           {loadingView && !data ? (
@@ -443,6 +468,360 @@ export default function Finance({ project, onProjectChange }) {
 
     </div>
   );
+}
+
+// -------------------------------------------------------------- excel export
+// 1-based column index -> Excel column letter(s)
+function xlCol(n) {
+  let s = "";
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+// Snapshot of the Budget details page (one year, in the displayed currency)
+// into a single worksheet. Month cells are static values; the aggregate
+// columns, TOTAL rows, grand total and the summary block are live formulas.
+// The obligo / no obligo split is static (Excel cannot derive it from a flag).
+async function exportBudgetDetailsXlsx({ project, data, cutoff, cur, curFactor, isBaseCur, codes }) {
+  const ExcelJS = (await import("exceljs")).default;
+  const noRate = !curFactor; // reporting currency without a rate: no numbers
+  const conv = (b) => b / curFactor;
+  const year = data.year.year;
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Transition Tracker";
+  wb.created = new Date();
+  wb.calcProperties.fullCalcOnLoad = true;
+  const ws = wb.addWorksheet(`Budget Details ${year}`, {
+    views: [{ state: "frozen", xSplit: 1, ySplit: 0 }],
+  });
+
+  const NUM = isBaseCur ? "#,##0" : "#,##0.00";
+  const fill = (argb) => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
+  const BAND = fill("FF1E293B");
+  const GRAND = fill("FF1D4ED8");
+  const HEAD = fill("FFE2E8F0");
+  const TOTAL = fill("FFF1F5F9");
+  const ZEBRA = fill("FFF8FAFC");
+  const PO = fill("FFBBF7D0");
+  const WHITE = { argb: "FFFFFFFF" };
+  const thin = { style: "thin", color: { argb: "FFE2E8F0" } };
+  const strong = { style: "thin", color: { argb: "FF94A3B8" } };
+  const monthSep = { style: "medium", color: { argb: "FF94A3B8" } };
+
+  const FIRST_M = 6; // column F = January budget
+  const LAST = FIRST_M + 23;
+  const bCol = (m) => FIRST_M + (m - 1) * 2;
+  const rCol = (m) => bCol(m) + 1;
+  const isBudgetCol = (c) => c >= FIRST_M && (c - FIRST_M) % 2 === 0;
+  const MONTH_NUMS = MONTHS.map((_, i) => i + 1);
+
+  ws.getColumn(1).width = 46;
+  for (let c = 2; c <= 5; c++) ws.getColumn(c).width = 17;
+  for (let c = FIRST_M; c <= LAST; c++) ws.getColumn(c).width = 14;
+
+  const borderFor = (c) => {
+    const b = { bottom: thin };
+    if (isBudgetCol(c) && c > FIRST_M) b.left = monthSep;
+    if (c === 5) b.right = strong;
+    return b;
+  };
+  const setNum = (cell, v) => {
+    if (!noRate) cell.value = v;
+  };
+  const setF = (cell, formula, result) => {
+    if (!noRate) cell.value = result === undefined ? { formula } : { formula, result };
+  };
+
+  // --- title block -------------------------------------------------------
+  ws.getCell("A1").value = `Budget details - ${project.name} - ${year}`;
+  ws.getCell("A1").font = { bold: true, size: 14 };
+  ws.getCell("A2").value = isBaseCur
+    ? `Currency: ${cur} (base)`
+    : `Currency: ${cur} (base ${codes.base}, rate ${noRate ? "not set" : fmt(curFactor)} ${codes.base}/${cur})`;
+  ws.getCell("A3").value =
+    cutoff > 12 ? "Forecast from: none (all months actual)" : `Forecast from: ${MONTHS[cutoff - 1]}`;
+  const now = new Date();
+  const p2 = (n) => String(n).padStart(2, "0");
+  const dateStr = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}`;
+  ws.getCell("A4").value = `Exported: ${dateStr} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
+  if (noRate) {
+    ws.getCell("A5").value = `No ${cur} rate set for ${year}: values are left empty.`;
+    ws.getCell("A5").font = { bold: true, color: { argb: "FFB45309" } };
+  }
+
+  // summary block is filled last (it references the grand total rows)
+  const SUM_TOP = 7;
+  let r = SUM_TOP + 9;
+
+  // --- table writers -----------------------------------------------------
+  const writeBand = (row, text, bandFill) => {
+    for (let c = 1; c <= LAST; c++) ws.getCell(row, c).fill = bandFill;
+    const a = ws.getCell(row, 1);
+    a.value = text;
+    a.font = { bold: true, color: WHITE };
+    ws.getRow(row).height = 20;
+  };
+
+  // two-row column header; returns the next free row
+  const writeHeader = (row) => {
+    const top = ["Item", "Budget", "Actual", "Forecast", "Total"];
+    top.forEach((t, i) => {
+      ws.mergeCells(row, i + 1, row + 1, i + 1);
+      const cell = ws.getCell(row, i + 1);
+      cell.value = t;
+      cell.alignment = { horizontal: i === 0 ? "left" : "right", vertical: "middle" };
+    });
+    for (const m of MONTH_NUMS) {
+      ws.mergeCells(row, bCol(m), row, rCol(m));
+      const mc = ws.getCell(row, bCol(m));
+      mc.value = MONTHS[m - 1];
+      mc.alignment = { horizontal: "center" };
+      const fc = m >= cutoff;
+      const b = ws.getCell(row + 1, bCol(m));
+      b.value = "Budget";
+      b.alignment = { horizontal: "center" };
+      const rr = ws.getCell(row + 1, rCol(m));
+      rr.value = fc ? "Forecast" : "Actual";
+      rr.alignment = { horizontal: "center" };
+      rr.font = { bold: true, size: 9, color: { argb: fc ? "FFC2410C" : "FF059669" } };
+    }
+    for (let rw = row; rw <= row + 1; rw++)
+      for (let c = 1; c <= LAST; c++) {
+        const cell = ws.getCell(rw, c);
+        cell.fill = HEAD;
+        if (!cell.font) cell.font = { bold: true, size: 9, color: { argb: "FF475569" } };
+        cell.border = borderFor(c);
+      }
+    return row + 2;
+  };
+
+  const writeMessage = (row, text) => {
+    const a = ws.getCell(row, 1);
+    a.value = text;
+    a.font = { italic: true, color: { argb: "FF94A3B8" } };
+  };
+
+  const itemLabel = (it) => {
+    let label;
+    if (it.is_cr) {
+      const kind = CR_KINDS.find((k) => k.id === it.cr_kind)?.label || "CR";
+      label = it.name ? `[${kind}] ${it.name}` : `[${kind}]`;
+    } else {
+      label = it.name || "-";
+    }
+    if (it.item_type === "manday" && !noRate)
+      label += `  (${fmt(conv(num(it.daily_rate)))} ${cur}/d)`;
+    return label;
+  };
+
+  const writeItem = (row, it) => {
+    const agg = aggItem(it, cutoff);
+    const a = ws.getCell(row, 1);
+    a.value = itemLabel(it);
+    a.font = { size: 10, color: { argb: "FF475569" } };
+    a.border = { bottom: thin };
+
+    for (const m of MONTH_NUMS) {
+      const mm = it.months.find((x) => x.month === m);
+      const bv = mm ? monthAmount(it, mm, "budget") : 0;
+      const rv = mm ? monthAmount(it, mm, "realized") : 0;
+      const bc = ws.getCell(row, bCol(m));
+      const rc = ws.getCell(row, rCol(m));
+      if (bv !== 0) setNum(bc, conv(bv));
+      if (rv !== 0) setNum(rc, conv(rv));
+      if (mm && m >= cutoff && mm.po_committed) {
+        rc.fill = PO;
+        if (mm.po_number) rc.note = `PO: ${mm.po_number}`;
+      }
+    }
+
+    const L = (c) => `${xlCol(c)}${row}`;
+    setF(ws.getCell(row, 2), `SUM(${MONTH_NUMS.map((m) => L(bCol(m))).join(",")})`, conv(agg.budget));
+    const actRefs = MONTH_NUMS.filter((m) => m < cutoff).map((m) => L(rCol(m)));
+    const fcRefs = MONTH_NUMS.filter((m) => m >= cutoff).map((m) => L(rCol(m)));
+    if (actRefs.length) setF(ws.getCell(row, 3), `SUM(${actRefs.join(",")})`, conv(agg.actual));
+    else setNum(ws.getCell(row, 3), 0);
+    if (fcRefs.length) setF(ws.getCell(row, 4), `SUM(${fcRefs.join(",")})`, conv(agg.forecast));
+    else setNum(ws.getCell(row, 4), 0);
+    setF(ws.getCell(row, 5), `C${row}+D${row}`, conv(agg.total));
+
+    for (let c = 2; c <= LAST; c++) {
+      const cell = ws.getCell(row, c);
+      cell.numFmt = NUM;
+      cell.font = { size: 10 };
+      cell.border = borderFor(c);
+      if (c === 2 || c === 4) cell.fill = ZEBRA;
+    }
+  };
+
+  // formulaFor(colLetter) -> formula string, or null for a static 0
+  const writeTotal = (row, label, formulaFor, agg, mTots) => {
+    const a = ws.getCell(row, 1);
+    a.value = label;
+    const results = { 2: agg.budget, 3: agg.actual, 4: agg.forecast, 5: agg.total };
+    for (const m of MONTH_NUMS) {
+      results[bCol(m)] = mTots[m - 1].b;
+      results[rCol(m)] = mTots[m - 1].r;
+    }
+    for (let c = 1; c <= LAST; c++) {
+      const cell = ws.getCell(row, c);
+      cell.fill = TOTAL;
+      cell.font = { bold: true, size: 10 };
+      cell.border = { ...borderFor(c), top: strong };
+      if (c === 1) continue;
+      cell.numFmt = NUM;
+      const f = formulaFor(xlCol(c));
+      if (f) setF(cell, f, conv(results[c]));
+      else setNum(cell, 0);
+    }
+  };
+
+  // --- WBS leg blocks ----------------------------------------------------
+  const legRows = []; // per leg: its TOTAL row and its TOTAL-with-CRs row
+  for (const leg of data.legs) {
+    const regular = leg.items.filter((it) => !it.is_cr);
+    const crs = leg.items.filter((it) => it.is_cr);
+    writeBand(r, [leg.code, leg.name, leg.category].filter(Boolean).join(" · ") || "WBS leg", BAND);
+    r = writeHeader(r + 1);
+    if (regular.length === 0 && crs.length === 0) writeMessage(r++, "No budget items yet.");
+
+    const regFirst = r;
+    for (const it of regular) writeItem(r++, it);
+    const regLast = r - 1;
+    const totalRow = r++;
+    writeTotal(
+      totalRow,
+      "TOTAL",
+      (L) => (regular.length ? `SUM(${L}${regFirst}:${L}${regLast})` : null),
+      sumAgg(regular.map((it) => aggItem(it, cutoff))),
+      monthTotals(regular)
+    );
+
+    let withRow = totalRow;
+    if (crs.length > 0) {
+      const crFirst = r;
+      for (const it of crs) writeItem(r++, it);
+      const crLast = r - 1;
+      withRow = r++;
+      writeTotal(
+        withRow,
+        "TOTAL with CRs",
+        (L) => `${L}${totalRow}+SUM(${L}${crFirst}:${L}${crLast})`,
+        sumAgg(leg.items.map((it) => aggItem(it, cutoff))),
+        monthTotals(leg.items)
+      );
+    }
+    legRows.push({ total: totalRow, withCrs: withRow });
+    r++; // spacer
+  }
+
+  // --- grand total block -------------------------------------------------
+  const allRegular = data.legs.flatMap((leg) => leg.items.filter((it) => !it.is_cr));
+  const allItems = data.legs.flatMap((leg) => leg.items);
+  const hasCrs = allItems.length > allRegular.length;
+  const regAgg = sumAgg(allRegular.map((it) => aggItem(it, cutoff)));
+  const withCrsAgg = sumAgg(allItems.map((it) => aggItem(it, cutoff)));
+
+  writeBand(r, "All WBS legs · Grand total", GRAND);
+  r = writeHeader(r + 1);
+  let gTotal = null;
+  let gWith = null;
+  if (data.legs.length === 0) {
+    writeMessage(r++, "No WBS legs yet.");
+  } else {
+    gTotal = r++;
+    writeTotal(
+      gTotal,
+      "TOTAL (all WBS)",
+      (L) => legRows.map((x) => `${L}${x.total}`).join("+"),
+      regAgg,
+      monthTotals(allRegular)
+    );
+    gWith = gTotal;
+    if (hasCrs) {
+      gWith = r++;
+      writeTotal(
+        gWith,
+        "TOTAL with CRs (all WBS)",
+        (L) => legRows.map((x) => `${L}${x.withCrs}`).join("+"),
+        withCrsAgg,
+        monthTotals(allItems)
+      );
+    }
+  }
+
+  // --- summary block (the 5 cards) ---------------------------------------
+  let fcCommitted = 0;
+  let fcUncommitted = 0;
+  for (const it of allRegular)
+    for (const m of it.months)
+      if (m.month >= cutoff) {
+        const amt = monthAmount(it, m, "realized");
+        if (m.po_committed) fcCommitted += amt;
+        else fcUncommitted += amt;
+      }
+  const bwc = withCrsAgg.budget; // regular budget + CR budget
+  const bwcRow = SUM_TOP + 2;
+  const pctRes = (v) => (bwc ? v / bwc : "");
+
+  ["Summary", cur, "% of Budget with CRs"].forEach((t, i) => {
+    const cell = ws.getCell(SUM_TOP, i + 1);
+    cell.value = t;
+    cell.fill = HEAD;
+    cell.font = { bold: true, size: 9, color: { argb: "FF475569" } };
+    cell.alignment = { horizontal: i === 0 ? "left" : "right" };
+  });
+  ws.getColumn(3).width = 22;
+  const summary = [
+    { label: "Budget", ref: gTotal && `B${gTotal}`, v: regAgg.budget },
+    { label: "Budget with CRs", ref: gWith && `B${gWith}`, v: bwc, accent: true },
+    { label: "Actual", ref: gTotal && `C${gTotal}`, v: regAgg.actual, pct: true },
+    { label: "Forecast", ref: gTotal && `D${gTotal}`, v: regAgg.forecast, pct: true },
+    { label: "   obligó", v: fcCommitted, pct: true, sub: true },
+    { label: "   no obligó", v: fcUncommitted, pct: true, sub: true },
+    { label: "Total (Actual + FC)", ref: gTotal && `E${gTotal}`, v: regAgg.total, pct: true },
+  ];
+  summary.forEach((s, i) => {
+    const row = SUM_TOP + 1 + i;
+    const a = ws.getCell(row, 1);
+    const b = ws.getCell(row, 2);
+    const c = ws.getCell(row, 3);
+    a.value = s.label;
+    a.font = s.sub ? { size: 10, color: { argb: "FF64748B" } } : { bold: true, size: 10 };
+    if (s.ref) setF(b, s.ref, conv(s.v));
+    else setNum(b, conv(s.v));
+    b.numFmt = NUM;
+    b.font = s.sub
+      ? { size: 10, color: { argb: "FF64748B" } }
+      : { bold: true, size: 10, color: s.accent ? { argb: "FF059669" } : undefined };
+    if (s.pct) {
+      setF(c, `IF($B$${bwcRow}<>0,B${row}/$B$${bwcRow},"")`, pctRes(s.v));
+      c.numFmt = "0%";
+      c.font = { size: 10, color: { argb: "FF64748B" } };
+      c.alignment = { horizontal: "right" };
+    }
+    for (const cell of [a, b, c]) cell.border = { bottom: thin };
+  });
+
+  // --- download ----------------------------------------------------------
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const safe = String(project.name || "project").replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "");
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `BudgetDetails_${safe}_${year}_${cur}_${dateStr}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ----------------------------------------------------------------- year grid
