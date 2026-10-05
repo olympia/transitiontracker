@@ -575,7 +575,15 @@ async function exportBudgetDetailsXlsx({ project, data, cutoff, cur, curFactor, 
   const year = data.year.year;
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Transition Tracker";
+  // Author / Company come from the project settings (Projects tab).
+  // exceljs writes "Unknown" for a falsy creator / lastModifiedBy, so an unset
+  // author is passed as a (truthy) empty String object to keep it blank.
+  const docAuthor = project.doc_author || new String("");
+  wb.creator = docAuthor;
+  wb.lastModifiedBy = docAuthor;
+  wb.company = project.doc_company || "";
+  wb.title = "Budget Details";
+  wb.subject = project.name || "";
   wb.created = new Date();
   wb.calcProperties.fullCalcOnLoad = true;
   const ws = wb.addWorksheet(`Budget Details ${year}`, {

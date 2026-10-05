@@ -13,6 +13,8 @@ class ProjectBase(BaseModel):
     base_currency: str = "HUF"
     reporting_currency_1: str = ""
     reporting_currency_2: str = ""
+    doc_author: str = ""
+    doc_company: str = ""
 
 
 class ProjectCreate(ProjectBase):
@@ -27,6 +29,8 @@ class ProjectUpdate(BaseModel):
     base_currency: str | None = None
     reporting_currency_1: str | None = None
     reporting_currency_2: str | None = None
+    doc_author: str | None = None
+    doc_company: str | None = None
 
 
 class ProjectOut(ProjectBase):

@@ -123,7 +123,14 @@ function ProjectModal({ open, project, onClose, onDone }) {
       setForm(
         project
           ? { ...project }
-          : { name: "", description: "", entity_label: "Rack", due_soon_days: 3 }
+          : {
+              name: "",
+              description: "",
+              entity_label: "Rack",
+              due_soon_days: 3,
+              doc_author: "",
+              doc_company: "",
+            }
       );
   }, [open, project]);
 
@@ -136,6 +143,8 @@ function ProjectModal({ open, project, onClose, onDone }) {
       description: form.description || "",
       entity_label: form.entity_label.trim() || "Entity",
       due_soon_days: Number(form.due_soon_days) || 3,
+      doc_author: (form.doc_author || "").trim(),
+      doc_company: (form.doc_company || "").trim(),
     };
     if (project) await api.updateProject(project.id, payload);
     else await api.createProject(payload);
@@ -192,6 +201,22 @@ function ProjectModal({ open, project, onClose, onDone }) {
               onChange={(e) =>
                 setForm({ ...form, due_soon_days: e.target.value })
               }
+            />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Document author">
+            <input
+              className="input"
+              value={form.doc_author || ""}
+              onChange={(e) => setForm({ ...form, doc_author: e.target.value })}
+            />
+          </Field>
+          <Field label="Company">
+            <input
+              className="input"
+              value={form.doc_company || ""}
+              onChange={(e) => setForm({ ...form, doc_company: e.target.value })}
             />
           </Field>
         </div>

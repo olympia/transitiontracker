@@ -32,6 +32,9 @@ class Project(Base):
     base_currency: Mapped[str] = mapped_column(String(10), default="HUF")
     reporting_currency_1: Mapped[str] = mapped_column(String(10), default="")
     reporting_currency_2: Mapped[str] = mapped_column(String(10), default="")
+    # document properties (Author / Company) written into Excel exports
+    doc_author: Mapped[str] = mapped_column(String(200), default="")
+    doc_company: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     task_definitions: Mapped[list["TaskDefinition"]] = relationship(
