@@ -68,6 +68,21 @@ export default function App() {
   // so a page reload always starts with it switched off
   const [editMode, setEditMode] = useState(false);
   const [editAvail, setEditAvail] = useState(false);
+  // the whole header (top bar + main tabs + sub tabs) is sticky; its height is
+  // published as --tt-header-h so inner pages can stick their own bars below it
+  const [headerEl, setHeaderEl] = useState(null);
+  useEffect(() => {
+    if (!headerEl) return;
+    const apply = () =>
+      document.documentElement.style.setProperty(
+        "--tt-header-h",
+        `${headerEl.offsetHeight}px`
+      );
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(headerEl);
+    return () => ro.disconnect();
+  }, [headerEl]);
 
   function selectMain(id) {
     setMainTab(id);
@@ -112,7 +127,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/80">
+      <header
+        ref={setHeaderEl}
+        className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/80">
         <div className="mx-auto flex h-16 max-w-[2400px] items-center gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand-600 text-white shadow-soft">
@@ -230,34 +247,33 @@ export default function App() {
             })}
           </nav>
         </div>
-      </header>
-
-      {/* sub tabs */}
-      {SUB_TABS[mainTab]?.length > 0 && (
-        <div className="border-b border-slate-200/70 bg-slate-50/60 dark:border-slate-800/70 dark:bg-slate-900/40">
-          <div className="mx-auto max-w-[2400px] px-4 py-2 sm:px-6">
-            <div className="flex flex-wrap gap-1">
-              {SUB_TABS[mainTab].map((s) => {
-                const Icon = s.icon;
-                const active = subTab === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => selectSub(s.id)}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                      active
-                        ? "bg-brand-600 text-white shadow-soft"
-                        : "text-slate-500 hover:bg-slate-200/60 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    <Icon size={14} /> {s.label}
-                  </button>
-                );
-              })}
+        {/* sub tabs */}
+        {SUB_TABS[mainTab]?.length > 0 && (
+          <div className="bg-slate-50/60 dark:bg-slate-900/40">
+            <div className="mx-auto max-w-[2400px] px-4 py-2 sm:px-6">
+              <div className="flex flex-wrap gap-1">
+                {SUB_TABS[mainTab].map((s) => {
+                  const Icon = s.icon;
+                  const active = subTab === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => selectSub(s.id)}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        active
+                          ? "bg-brand-600 text-white shadow-soft"
+                          : "text-slate-500 hover:bg-slate-200/60 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                      }`}
+                    >
+                      <Icon size={14} /> {s.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </header>
 
       <main className="mx-auto max-w-[2400px] px-4 py-6 sm:px-6">
         {mainTab === "projects" ? (

@@ -198,7 +198,13 @@ export default function FinancialReport({ project }) {
     }`;
 
   const yearPicker = (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    // frozen under the app header (--tt-header-h is set in App.jsx); the
+    // negative margins let the backdrop reach the content container's edges
+    <div
+      className="sticky z-30 -mx-4 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur-xl sm:-mx-6 sm:px-6 dark:border-slate-800/70 dark:bg-slate-950/90"
+      style={{ top: "var(--tt-header-h, 152px)" }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/70">
         <button onClick={() => setSel("overall")} className={pillCls(curSel === "overall")}>
           Overall
@@ -236,6 +242,7 @@ export default function FinancialReport({ project }) {
           </select>
         </label>
       )}
+      </div>
     </div>
   );
 
